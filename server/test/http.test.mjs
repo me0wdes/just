@@ -1,0 +1,20 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';import {createHash,randomBytes} from 'node:crypto';import {request as httpRequest} from 'node:http';
+import {createHttpServer} from '../src/http.mjs';import {temporaryStore,request,operation} from './helpers.mjs';
+test('HTTP authenticates, limits bytes, hides private data and survives bad requests',async t=>{
+ const {store,cleanup}=temporaryStore(),token=randomBytes(32).toString('base64url'),logs=[];
+ const server=createHttpServer({store,tokenHash:createHash('sha256').update(token).digest(),logger:event=>logs.push(JSON.stringify(event))});
+ await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve);});
+ t.after(async()=>{await new Promise(resolve=>{server.close(resolve);server.closeAllConnections();});cleanup();});
+ const url=`http://127.0.0.1:${server.address().port}/sync`;
+ const send=(body,key=token)=>fetch(url,{method:'POST',headers:{authorization:`Bearer ${key}`,'content-type':'application/json'},body:typeof body==='string'?body:JSON.stringify(body)});
+ assert.equal((await send(request(),'wrong')).status,401);
+ for(const body of ['x'.repeat(262145),'😀'.repeat(70000)])assert.equal((await send(body)).status,413);
+ const invalid=await send('{broken');assert.equal(invalid.status,400);assert.deepEqual(await invalid.json(),{error:{code:'invalid_json'}});
+ assert.equal((await fetch(url.replace('/sync','/nope'))).status,404);
+ const response=await send(request([operation()]));assert.equal(response.status,200);const result=await response.json();assert.equal(result.workspaceId,store.workspaceId);assert.equal(result.acknowledgements[0].status,'applied');
+ assert.equal((await send({...request(),protocolVersion:2})).status,409);
+ const empty=await send(request());assert.equal((await empty.json()).workspaceId,store.workspaceId);
+ await new Promise(resolve=>{const req=httpRequest(url,{method:'POST',headers:{authorization:`Bearer ${token}`,'content-type':'application/json','content-length':999}},()=>resolve());req.on('error',()=>resolve());req.write('{');req.destroy();});
+ assert.equal((await send(request())).status,200);
+ assert.equal(logs.join('').includes(token),false);assert.equal(logs.join('').includes('Личная задача'),false);
+});

@@ -1,0 +1,5 @@
+ItsHover https://github.com/itshover/itshover
+Revision: e5fc90512d9bcd8e6cba407ebf88cb9458989ca3
+Adapted JSX SVG geometry to static SVG; native Flutter motion is implemented separately.
+Stroke width normalized to 1.75 at 24px; original paths retained.
+License: Apache-2.0 (bundled in app/assets/licenses).

@@ -1,0 +1,22 @@
+{
+  "name": "Rose gold",
+  "type": "flow",
+  "profile": "sRGB",
+  "dividers": [0.25, 0.5, 0.75],
+  "soften": 0,
+  "noise": 6,
+  "speed": 26,
+  "stops": [
+    {"name": "SAKURA MIST", "hex": "#FFF4E8", "position": 0.125},
+    {"name": "IBIS HAZE", "hex": "#FBC9AC", "position": 0.375},
+    {"name": "CORAL GLAZE", "hex": "#E79BA7", "position": 0.625},
+    {"name": "CLEAR VERMILION", "hex": "#8E5A74", "position": 0.875}
+  ],
+  "engineExport": {
+    "scale": 52,
+    "distortion": 50,
+    "swirl": 8,
+    "startT": 43.11694856000138
+  },
+  "headerInk": "#323F78"
+}

@@ -1,0 +1,31 @@
+# Credentials and personal data
+.env
+.env.*
+!.env.example
+*.sqlite
+*.sqlite3
+*.sqlite-wal
+*.sqlite-shm
+*.db
+*.db-wal
+*.db-shm
+*.jks
+*.keystore
+key.properties
+sync-config.private.json
+
+# Generated outputs and local tools
+.dart_tool/
+.flutter-plugins-dependencies
+build/
+node_modules/
+.tools/
+.idea/
+.vscode/
+android/local.properties
+coverage/
+*.log
+releases/
+*.pfx
+*.key
+*.pem

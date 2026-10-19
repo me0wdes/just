@@ -1,0 +1,36 @@
+{
+  "name": "Solar flare",
+  "type": "flow",
+  "profile": "sRGB",
+  "dividers": [
+    0.25,
+    0.5,
+    0.75
+  ],
+  "soften": 0,
+  "noise": 6,
+  "speed": 28,
+  "use": "день, 12:00–19:00",
+  "stops": [
+    {
+      "name": "ROSE RICE",
+      "hex": "#FFF6DE",
+      "position": 0.125
+    },
+    {
+      "name": "SAPPAN ROSE",
+      "hex": "#FFC24B",
+      "position": 0.375
+    },
+    {
+      "name": "WILD PLUM",
+      "hex": "#F4664D",
+      "position": 0.625
+    },
+    {
+      "name": "INKED VIOLET",
+      "hex": "#8A2E5E",
+      "position": 0.875
+    }
+  ]
+}

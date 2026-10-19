@@ -1,0 +1,36 @@
+{
+  "name": "Night",
+  "type": "flow",
+  "profile": "sRGB",
+  "dividers": [
+    0.25,
+    0.49126455930178237,
+    0.75
+  ],
+  "soften": 0,
+  "noise": 6,
+  "speed": 32,
+  "use": "ночь, 19:00–04:00",
+  "stops": [
+    {
+      "name": "MISTED SKY",
+      "hex": "#DFFBFF",
+      "position": 0.125
+    },
+    {
+      "name": "PALE LAGOON",
+      "hex": "#6FD8F2",
+      "position": 0.371
+    },
+    {
+      "name": "CLEAR HANADA",
+      "hex": "#4C5BE0",
+      "position": 0.621
+    },
+    {
+      "name": "NIGHT INDIGO",
+      "hex": "#2A2450",
+      "position": 0.875
+    }
+  ]
+}
