@@ -287,12 +287,17 @@ class DaySelect<T> extends StatefulWidget {
   final List<DaySelectItem<T>> items;
   final ValueChanged<T> onChanged;
   final String placeholder;
+
+  /// The value that means «nothing chosen» (e.g. «Без повтора»); it is
+  /// shown in the muted colour, as Figma «Выбор / Пусто=Да».
+  final T? emptyValue;
   const DaySelect({
     super.key,
     required this.value,
     required this.items,
     required this.onChanged,
     this.placeholder = 'Выбрать',
+    this.emptyValue,
   });
   @override
   State<DaySelect<T>> createState() => _DaySelectState<T>();
@@ -427,7 +432,12 @@ class _DaySelectState<T> extends State<DaySelect<T>>
                           overflow: TextOverflow.ellipsis,
                           style: Theme.of(context).textTheme.bodyMedium!
                               .copyWith(
-                                color: label == null ? c.muted : c.text,
+                                color:
+                                    label == null ||
+                                        (widget.emptyValue != null &&
+                                            current == widget.emptyValue)
+                                    ? c.muted
+                                    : c.text,
                               ),
                         ),
                       ),

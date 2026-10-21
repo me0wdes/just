@@ -214,31 +214,11 @@ class _TaskDetailPanelState extends State<TaskDetailPanel> {
 
   /// One property line: icon and label on the left, the control on the
   /// right, every row on the 36px control height.
-  Widget prop(DayGlyph icon, String label, Widget control) {
-    final c = DayColors.of(context);
-    return SizedBox(
-      height: 44,
-      child: Row(
-        children: [
-          DayIcon(icon, size: 18, color: c.icon),
-          const SizedBox(width: 10),
-          SizedBox(
-            width: 104,
-            child: Text(
-              label,
-              style: Theme.of(context).textTheme.bodyMedium!
-                  .copyWith(color: c.muted),
-            ),
-          ),
-          Expanded(
-            child: Align(alignment: Alignment.centerLeft, child: control),
-          ),
-        ],
-      ),
-    );
-  }
+  /// One property line: icon and label on the left, the control on the
+  /// right. Figma «Свойство»: hovering the row lights its icon and label.
+  Widget prop(DayGlyph icon, String label, Widget control) =>
+      _PropRow(icon: icon, label: label, control: control);
 
-  /// A value that opens a picker, with a clear button once it is set.
   /// A value that opens a picker; its clear button shows on hover, as the
   /// «Значение» hover variant in Figma.
   Widget valueButton(
@@ -318,6 +298,7 @@ class _TaskDetailPanelState extends State<TaskDetailPanel> {
                           // Figma: one list per task; «Без списка» clears it.
                           DaySelect<String>(
                             value: listIds.firstOrNull ?? inboxId,
+                            emptyValue: inboxId,
                             items: [
                               for (final list in widget.controller.lists)
                                 DaySelectItem(
@@ -360,6 +341,7 @@ class _TaskDetailPanelState extends State<TaskDetailPanel> {
                           DaySelect<String>(
                             key: ValueKey('repeat-$frequency'),
                             value: frequency ?? 'none',
+                            emptyValue: 'none',
                             items: const [
                               DaySelectItem('none', 'Без повтора'),
                               DaySelectItem('daily', 'Каждый день'),
@@ -540,6 +522,61 @@ class _ValueButtonState extends State<_ValueButton> {
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+class _PropRow extends StatefulWidget {
+  final DayGlyph icon;
+  final String label;
+  final Widget control;
+  const _PropRow({
+    required this.icon,
+    required this.label,
+    required this.control,
+  });
+  @override
+  State<_PropRow> createState() => _PropRowState();
+}
+
+class _PropRowState extends State<_PropRow> {
+  bool hovered = false;
+  @override
+  Widget build(BuildContext context) {
+    final c = DayColors.of(context);
+    final fast = MotionTokens.duration(context, MotionTokens.fast);
+    return MouseRegion(
+      onEnter: (_) => setState(() => hovered = true),
+      onExit: (_) => setState(() => hovered = false),
+      child: SizedBox(
+        height: 44,
+        child: Row(
+          children: [
+            TweenAnimationBuilder<Color?>(
+              tween: ColorTween(end: hovered ? c.text : c.icon),
+              duration: fast,
+              builder: (context, color, _) =>
+                  DayIcon(widget.icon, size: 18, color: color),
+            ),
+            const SizedBox(width: 10),
+            SizedBox(
+              width: 104,
+              child: AnimatedDefaultTextStyle(
+                duration: fast,
+                style: Theme.of(context).textTheme.bodyMedium!
+                    .copyWith(color: hovered ? c.text : c.muted),
+                child: Text(widget.label),
+              ),
+            ),
+            Expanded(
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: widget.control,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
