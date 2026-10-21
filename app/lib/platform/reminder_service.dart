@@ -35,7 +35,7 @@ class NativeNotificationPort implements NotificationPort {
   final taps = StreamController<String>.broadcast();
   bool initialized = false;
   Future<bool> _supported() async {
-    if (!Platform.isWindows) return Platform.isAndroid;
+    if (!Platform.isWindows) return Platform.isAndroid || Platform.isMacOS;
     try {
       return await const MethodChannel('day/platform')
               .invokeMethod<bool>('hasPackageIdentity') ??
@@ -50,6 +50,12 @@ class NativeNotificationPort implements NotificationPort {
     await plugin.initialize(
       settings: const InitializationSettings(
         android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+        // Ask on the first reminder, not at launch.
+        macOS: DarwinInitializationSettings(
+          requestAlertPermission: false,
+          requestBadgePermission: false,
+          requestSoundPermission: false,
+        ),
         windows: WindowsInitializationSettings(
           appName: 'Just',
           appUserModelId: 'ClaudeWork.Day',
@@ -82,6 +88,16 @@ class NativeNotificationPort implements NotificationPort {
       }
     }
     await initialize();
+    if (Platform.isMacOS) {
+      final options = await plugin
+          .resolvePlatformSpecificImplementation<
+            MacOSFlutterLocalNotificationsPlugin
+          >()
+          ?.checkPermissions();
+      return options?.isEnabled == true
+          ? ReminderPermission.granted
+          : ReminderPermission.denied;
+    }
     if (Platform.isAndroid) {
       final android = plugin
           .resolvePlatformSpecificImplementation<
@@ -101,6 +117,16 @@ class NativeNotificationPort implements NotificationPort {
   Future<ReminderPermission> requestPermission() async {
     if (!await _supported()) return ReminderPermission.unsupportedPackage;
     await initialize();
+    if (Platform.isMacOS) {
+      final mac = plugin
+          .resolvePlatformSpecificImplementation<
+            MacOSFlutterLocalNotificationsPlugin
+          >();
+      final ok = await mac?.requestPermissions(alert: true, sound: true);
+      return ok == true
+          ? ReminderPermission.granted
+          : ReminderPermission.denied;
+    }
     if (Platform.isAndroid) {
       final android = plugin
           .resolvePlatformSpecificImplementation<
@@ -128,6 +154,7 @@ class NativeNotificationPort implements NotificationPort {
         channelDescription: 'Напоминания о ваших задачах',
       ),
       windows: WindowsNotificationDetails(),
+      macOS: DarwinNotificationDetails(),
     ),
     androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
     payload: task.id,

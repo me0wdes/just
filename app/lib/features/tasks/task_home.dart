@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -52,6 +53,8 @@ String _plural(int n, String one, String few, String many) {
   if (d >= 2 && d <= 4 && (h < 12 || h > 14)) return few;
   return many;
 }
+
+final _mac = defaultTargetPlatform == TargetPlatform.macOS;
 
 /// Sidebar width on wide windows.
 const sidebarWidth = 240.0;
@@ -159,6 +162,8 @@ class _TaskHomeState extends State<TaskHome> {
           ..hideCurrentSnackBar()
           ..showSnackBar(
             SnackBar(
+              persist: false,
+              duration: MotionTokens.toast,
               content: Text('«${task.title}» выполнена'),
               action: SnackBarAction(
                 label: 'Вернуть',
@@ -180,7 +185,11 @@ class _TaskHomeState extends State<TaskHome> {
         });
         DaySound.play(context, UiSound.error);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Не удалось изменить задачу')),
+          const SnackBar(
+            persist: false,
+            duration: MotionTokens.toast,
+            content: Text('Не удалось изменить задачу'),
+          ),
         );
       }
     }
@@ -195,6 +204,8 @@ class _TaskHomeState extends State<TaskHome> {
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
+          persist: false,
+          duration: MotionTokens.toast,
           content: const Text('Задача удалена'),
           action: SnackBarAction(
             label: 'Отменить',
@@ -567,7 +578,7 @@ class _TaskHomeState extends State<TaskHome> {
                             ),
                           ),
                           DayButton.icon(
-                            tooltip: 'Поиск · Ctrl+F',
+                            tooltip: _mac ? 'Поиск · ⌘F' : 'Поиск · Ctrl+F',
                             sound: UiSound.open,
                             onPressed: searching ? closeSearch : openSearch,
                             icon: DayIcon(
@@ -775,11 +786,16 @@ class _TaskHomeState extends State<TaskHome> {
     listenable: c,
     builder: (context, _) => CallbackShortcuts(
       bindings: {
-        const SingleActivator(LogicalKeyboardKey.keyN, control: true): () {
+        // ⌘ on macOS, Ctrl elsewhere.
+        SingleActivator(
+          LogicalKeyboardKey.keyN,
+          control: !_mac,
+          meta: _mac,
+        ): () {
           setState(() => showCompleted = false);
           composer.requestFocus();
         },
-        const SingleActivator(LogicalKeyboardKey.keyF, control: true):
+        SingleActivator(LogicalKeyboardKey.keyF, control: !_mac, meta: _mac):
             openSearch,
         const SingleActivator(LogicalKeyboardKey.escape): () {
           if (c.selectedId != null) DaySound.play(context, UiSound.close);
@@ -821,87 +837,97 @@ class _TaskHomeState extends State<TaskHome> {
                     ),
               body: desktop
                   ? SafeArea(
-                      child: Padding(
-                        padding: const EdgeInsets.all(20),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            panel(
-                              key: const Key('desktop-sidebar'),
-                              child: SizedBox(
-                                width: sidebarWidth,
-                                child: ListPanel(
-                                  controller: c,
-                                  onSettings: widget.onSettings,
-                                  status: syncAlert ? syncStatus() : null,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 20),
-                            Expanded(
-                              child: panel(
-                                // Figma: a 4px screen-coloured frame keeps
-                                // the gradient off the panel's edge.
-                                child: Padding(
-                                  padding: const EdgeInsets.all(4),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.stretch,
-                                    children: [
-                                      if (!keyboard)
-                                        ClipRRect(
-                                          borderRadius:
-                                              const BorderRadius.vertical(
-                                                top: Radius.circular(24),
-                                              ),
-                                          child: head,
-                                        ),
-                                      Expanded(
-                                        child: workspace(desktop, inline),
-                                      ),
-                                    ],
+                      child: _MacTitleBar(
+                        child: Padding(
+                          // macOS: room for the traffic lights over the canvas.
+                          padding: EdgeInsets.fromLTRB(
+                            20,
+                            _mac ? 34 : 20,
+                            20,
+                            20,
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              panel(
+                                key: const Key('desktop-sidebar'),
+                                child: SizedBox(
+                                  width: sidebarWidth,
+                                  child: ListPanel(
+                                    controller: c,
+                                    onSettings: widget.onSettings,
+                                    status: syncAlert ? syncStatus() : null,
                                   ),
                                 ),
                               ),
-                            ),
-                            _DetailSlot(
-                              child: selected == null
-                                  ? null
-                                  : Padding(
-                                      // One key for the open panel: switching
-                                      // tasks swaps content, not the panel.
-                                      key: const ValueKey('detail'),
-                                      padding: const EdgeInsets.only(left: 20),
-                                      child: panel(
-                                        child: SizedBox(
-                                          width: 360,
-                                          child: ChromaSwap(
-                                            swapKey: selected.id,
-                                            colors: [
-                                              head.palette.stops[2],
-                                              head.palette.stops[1],
-                                              head.palette.stops[0],
-                                            ],
-                                            child: TaskDetailPanel(
-                                              key: ValueKey(selected.id),
-                                              task: selected,
-                                              controller: c,
-                                              onRequestReminder:
-                                                  widget.onRequestReminder,
-                                              onClose: () {
-                                                DaySound.play(
-                                                  context,
-                                                  UiSound.close,
-                                                );
-                                                c.select(null);
-                                              },
+                              const SizedBox(width: 20),
+                              Expanded(
+                                child: panel(
+                                  // Figma: a 4px screen-coloured frame keeps
+                                  // the gradient off the panel's edge.
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(4),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
+                                      children: [
+                                        if (!keyboard)
+                                          ClipRRect(
+                                            borderRadius:
+                                                const BorderRadius.vertical(
+                                                  top: Radius.circular(24),
+                                                ),
+                                            child: head,
+                                          ),
+                                        Expanded(
+                                          child: workspace(desktop, inline),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              _DetailSlot(
+                                child: selected == null
+                                    ? null
+                                    : Padding(
+                                        // One key for the open panel: switching
+                                        // tasks swaps content, not the panel.
+                                        key: const ValueKey('detail'),
+                                        padding: const EdgeInsets.only(
+                                          left: 20,
+                                        ),
+                                        child: panel(
+                                          child: SizedBox(
+                                            width: 360,
+                                            child: ChromaSwap(
+                                              swapKey: selected.id,
+                                              colors: [
+                                                head.palette.stops[2],
+                                                head.palette.stops[1],
+                                                head.palette.stops[0],
+                                              ],
+                                              child: TaskDetailPanel(
+                                                key: ValueKey(selected.id),
+                                                task: selected,
+                                                controller: c,
+                                                onRequestReminder:
+                                                    widget.onRequestReminder,
+                                                onClose: () {
+                                                  DaySound.play(
+                                                    context,
+                                                    UiSound.close,
+                                                  );
+                                                  c.select(null);
+                                                },
+                                              ),
                                             ),
                                           ),
                                         ),
                                       ),
-                                    ),
-                            ),
-                          ],
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     )
@@ -946,6 +972,33 @@ class _TaskHomeState extends State<TaskHome> {
     padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
     child: phoneBar(),
   );
+}
+
+/// macOS: the window has no title bar of its own, so the strip above the
+/// panels moves the window and a double click zooms it, like a real bar.
+class _MacTitleBar extends StatelessWidget {
+  final Widget child;
+  const _MacTitleBar({required this.child});
+  static const _channel = MethodChannel('day/platform');
+  @override
+  Widget build(BuildContext context) => !_mac
+      ? child
+      : Stack(
+          children: [
+            child,
+            Positioned(
+              left: 0,
+              right: 0,
+              top: 0,
+              height: 30,
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onPanStart: (_) => _channel.invokeMethod('dragWindow'),
+                onDoubleTap: () => _channel.invokeMethod('zoomWindow'),
+              ),
+            ),
+          ],
+        );
 }
 
 /// Detail card slides in from the right edge and folds the space it took.

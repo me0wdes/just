@@ -3,6 +3,9 @@ import '../../theme/day_icon.dart';
 
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
+
+import '../../theme/motion_tokens.dart';
+
 import 'package:flutter_timezone/flutter_timezone.dart';
 
 import '../../domain/models.dart';
@@ -196,6 +199,8 @@ class _TaskDetailPanelState extends State<TaskDetailPanel> {
     if (messenger.mounted) {
       messenger.showSnackBar(
         SnackBar(
+          persist: false,
+          duration: MotionTokens.toast,
           content: const Text('Задача удалена'),
           action: SnackBarAction(
             label: 'Отменить',

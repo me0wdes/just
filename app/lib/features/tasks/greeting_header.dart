@@ -11,7 +11,10 @@ import '../../theme/motion_tokens.dart';
 class FlowPalette {
   final List<Color> stops;
   final double speed;
-  const FlowPalette(this.stops, {this.speed = 26});
+
+  /// The export's "type": soft FLOW blobs or aurora ribbons.
+  final bool aurora;
+  const FlowPalette(this.stops, {this.speed = 26, this.aurora = false});
   static const roseGold = FlowPalette([
     Color(0xfffff4e8),
     Color(0xfffbc9ac),
@@ -24,12 +27,17 @@ class FlowPalette {
     Color(0xfff4664d),
     Color(0xff8a2e5e),
   ], speed: 28);
-  static const night = FlowPalette([
-    Color(0xffdffbff),
-    Color(0xff6fd8f2),
-    Color(0xff4c5be0),
-    Color(0xff2a2450),
-  ], speed: 32);
+  /// «Northern lights», aurora type.
+  static const night = FlowPalette(
+    [
+      Color(0xffeafff4),
+      Color(0xff4be8a0),
+      Color(0xff2e6e80),
+      Color(0xff16224d),
+    ],
+    speed: 26,
+    aurora: true,
+  );
 
   /// Morning 04–12 Rose gold, day 12–19 Solar flare, night 19–04.
   static FlowPalette forHour(int hour) => hour >= 4 && hour < 12
@@ -156,6 +164,7 @@ class _RoseGoldPainter extends CustomPainter {
           ..setFloat(i++, c.g)
           ..setFloat(i++, c.b);
       }
+      program.setFloat(i, palette.aurora ? 1 : 0);
       canvas.drawRect(rect, Paint()..shader = program);
     } else {
       canvas.drawRect(

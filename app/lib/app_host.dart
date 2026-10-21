@@ -4,6 +4,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+
 import 'package:flutter/services.dart';
 
 import 'app.dart';
@@ -200,6 +201,8 @@ class _DayHostState extends State<DayHost> with WidgetsBindingObserver {
     if (context == null || !context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
+        // A sync conflict note is long, so it stays longer than a toast.
+        persist: false,
         duration: const Duration(seconds: 8),
         content: Text(
           conflict['code'] == 'successor_absent'

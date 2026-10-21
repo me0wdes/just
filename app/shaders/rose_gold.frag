@@ -9,6 +9,8 @@ uniform vec3 uC0;
 uniform vec3 uC1;
 uniform vec3 uC2;
 uniform vec3 uC3;
+// 0 = FLOW (soft drifting blobs), 1 = aurora (glowing ribbons on a dark sky).
+uniform float uMode;
 out vec4 fragColor;
 
 float soft(float x) { return smoothstep(0.0,1.0,x); }
@@ -26,7 +28,29 @@ vec3 fromLab(vec3 lab) {
   vec3 rgb=vec3(dot(x,vec3(4.0767416621,-3.3077115913,.2309699292)),dot(x,vec3(-1.2684380046,2.6097574011,-.3413193965)),dot(x,vec3(-.0041960863,-.7034186147,1.707614701)));
   return clamp(mix(rgb*12.92,1.055*pow(max(rgb,vec3(0.0)),vec3(1.0/2.4))-.055,step(vec3(.0031308),rgb)),0.0,1.0);
 }
+// Aurora: the darkest stop is the sky, the deep stop rises from the horizon,
+// and three wavering ribbons glow in the bright stops.
+vec3 aurora(vec2 uv, float t) {
+  vec3 col=mix(uC3, uC2, smoothstep(-.2, 1.1, 1.0-uv.y));
+  for(int i=0;i<3;i++) {
+    float k=float(i);
+    float center=.48+.16*k+.06*sin(uv.x*2.6+t*.45+k*2.1)+.025*sin(uv.x*7.0-t*.7+k);
+    float width=.055+.025*sin(uv.x*1.7+t*.3+k*1.3);
+    // a curtain: sharp lower edge, long soft fade upwards
+    float d=uv.y-center;
+    float band=d<0.0?exp(-d*d/(width*width*.35)):exp(-d/(width*2.6));
+    float rays=.6+.4*sin(uv.x*24.0+t*1.2+k*4.0+sin(uv.x*4.0+t*.6)*2.0);
+    vec3 tint=mix(uC1, uC0, .25+.25*sin(uv.x*3.0+t*.35+k));
+    col=mix(col, tint, clamp(band*rays*(.62-.14*k), 0.0, 1.0));
+  }
+  return col;
+}
 void main() {
+  if (uMode > .5) {
+    vec2 uv=FlutterFragCoord().xy/max(uSize,vec2(1.0));
+    fragColor=vec4(aurora(vec2(uv.x, 1.0-uv.y), uTime*1.6), 1.0);
+    return;
+  }
   vec2 p=(FlutterFragCoord().xy/max(uSize,vec2(1.0))-.5)/1.024+.5;
   float edge=soft(length(p-.5));
   for(int i=1;i<=2;i++) {

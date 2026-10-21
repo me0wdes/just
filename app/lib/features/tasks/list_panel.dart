@@ -4,6 +4,7 @@ import '../../domain/models.dart';
 import '../../platform/feedback_service.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/day_icon.dart';
+import '../../theme/controls.dart';
 import '../../theme/day_sound.dart';
 import '../../theme/fluid_button.dart';
 import '../../theme/fluid_surface.dart';
@@ -79,7 +80,7 @@ class ListPanel extends StatelessWidget {
       DayGlyph icon,
       bool selected,
       VoidCallback tap, {
-      Widget? menu,
+      void Function(Offset at)? onMenu,
     }) {
       if (selected) selectedTop = y;
       rows.add(
@@ -90,7 +91,7 @@ class ListPanel extends StatelessWidget {
             icon: icon,
             selected: selected,
             height: extent,
-            menu: menu,
+            onMenu: onMenu,
             onTap: () {
               tap();
               onNavigate?.call();
@@ -140,37 +141,20 @@ class ListPanel extends StatelessWidget {
         list.id == inboxId ? DayGlyph.note : DayGlyph.list,
         q.view == TaskView.list && q.listId == list.id,
         () => controller.navigate(TaskView.list, listId: list.id),
-        menu: list.id == inboxId
+        // Right click (long press on touch) instead of a «…» button.
+        onMenu: list.id == inboxId
             ? null
-            : PopupMenuButton<String>(
-                tooltip: 'Действия со списком',
-                position: PopupMenuPosition.under,
-                padding: EdgeInsets.zero,
-                iconSize: 18,
-                onOpened: () => DaySound.play(context, UiSound.tap),
-                icon: DayIcon(DayGlyph.more, size: 18, color: c.muted),
-                onSelected: (action) {
-                  if (action == 'rename') {
-                    edit(context, list: list);
-                  } else {
-                    DaySound.play(context, UiSound.delete);
-                    controller.deleteList(list.id);
-                  }
-                },
-                itemBuilder: (_) => [
-                  const PopupMenuItem(
-                    value: 'rename',
-                    child: Text('Переименовать'),
-                  ),
-                  PopupMenuItem(
-                    value: 'delete',
-                    child: Text(
-                      'Удалить список',
-                      style: TextStyle(color: theme.colorScheme.error),
-                    ),
-                  ),
-                ],
-              ),
+            : (at) => showDayMenu(context, at, [
+                DayMenuItem(
+                  'Переименовать',
+                  DayGlyph.note,
+                  () => edit(context, list: list),
+                ),
+                DayMenuItem('Удалить список', DayGlyph.delete, () {
+                  DaySound.play(context, UiSound.delete);
+                  controller.deleteList(list.id);
+                }, destructive: true),
+              ]),
       );
     }
     rows.add(
@@ -262,7 +246,7 @@ class _NavItem extends StatefulWidget {
   final bool selected;
   final double height;
   final VoidCallback onTap;
-  final Widget? menu;
+  final void Function(Offset at)? onMenu;
   final UiSound? sound;
   const _NavItem({
     required this.title,
@@ -270,7 +254,7 @@ class _NavItem extends StatefulWidget {
     required this.selected,
     required this.height,
     required this.onTap,
-    this.menu,
+    this.onMenu,
     this.sound = UiSound.nav,
   });
   @override
@@ -297,6 +281,17 @@ class _NavItemState extends State<_NavItem> {
             borderRadius: BorderRadius.circular(8),
             child: InkWell(
               onTap: widget.onTap,
+              onSecondaryTapUp: widget.onMenu == null
+                  ? null
+                  : (d) => widget.onMenu!(d.globalPosition),
+              onLongPress: widget.onMenu == null
+                  ? null
+                  : () {
+                      final box = context.findRenderObject() as RenderBox;
+                      widget.onMenu!(
+                        box.localToGlobal(box.size.centerLeft(Offset.zero)),
+                      );
+                    },
               borderRadius: BorderRadius.circular(8),
               child: SizedBox(
                 height: widget.height,
@@ -317,21 +312,7 @@ class _NavItemState extends State<_NavItem> {
                         ),
                       ),
                     ),
-                    if (widget.menu != null)
-                      AnimatedOpacity(
-                        opacity: hovered || widget.selected ? 1 : 0,
-                        duration: MotionTokens.duration(
-                          context,
-                          MotionTokens.fast,
-                        ),
-                        child: SizedBox(
-                          width: 36,
-                          height: 36,
-                          child: widget.menu,
-                        ),
-                      )
-                    else
-                      const SizedBox(width: 8),
+                    const SizedBox(width: 8),
                   ],
                 ),
               ),

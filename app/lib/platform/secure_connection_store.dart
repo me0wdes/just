@@ -33,7 +33,13 @@ abstract interface class SecureConnectionStore {
 
 class OsSecureConnectionStore implements SecureConnectionStore {
   final FlutterSecureStorage storage;
-  const OsSecureConnectionStore({this.storage = const FlutterSecureStorage()});
+  // On macOS the login keychain needs no signing team or keychain-sharing
+  // entitlement, so unsigned local builds keep the sync key too.
+  const OsSecureConnectionStore({
+    this.storage = const FlutterSecureStorage(
+      mOptions: MacOsOptions(usesDataProtectionKeychain: false),
+    ),
+  });
   @override
   Future<ConnectionSecret?> read(String profileId) async {
     final value = await storage.read(key: 'day.connection.$profileId');

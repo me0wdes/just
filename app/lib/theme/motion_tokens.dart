@@ -23,6 +23,9 @@ abstract final class MotionTokens {
       reflow = Duration(milliseconds: 220),
       panel = Duration(milliseconds: 240);
   static const easeOut = Cubic(.23, 1, .32, 1);
+
+  /// Toasts, undo ones included, leave on their own after 3 s.
+  static const toast = Duration(seconds: 3);
   static Duration duration(BuildContext context, Duration value) =>
       MediaQuery.disableAnimationsOf(context) ? Duration.zero : value;
 }
