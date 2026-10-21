@@ -32,5 +32,5 @@ curl -fsSL https://raw.githubusercontent.com/me0wdes/just/main/server/install.sh
 
 - Состояние: `systemctl status just-sync`
 - Журнал: `journalctl -u just-sync`
-- Обновить сервер: запустить установщик ещё раз
+- Обновления: сервер сам проверяет новую версию каждую ночь (таймер `just-sync-update`) и перезапускается, только если она вышла. Обновить сразу: запустить установщик ещё раз
 - Восстановить копию: `systemctl stop just-sync`, заменить `/var/lib/just-sync/sync.sqlite` нужным файлом из `backups`, `systemctl start just-sync`

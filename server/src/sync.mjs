@@ -1,7 +1,7 @@
 import {randomUUID} from 'node:crypto';
 import {INBOX_ID,validateRequest,validateChanges,ValidationError,fail} from './validation.mjs';
 import {nextOccurrence,successorId,nextReminderAt} from './recurrence.mjs';
-const defaults={task:{note:'',listId:INBOX_ID,dueDate:null,reminderAtUtc:null,reminderTimezone:null,plannedForDate:null,completedAt:null,completionId:null,successorId:null,recurrenceRuleId:null,occurrenceDate:null,position:0,deletedAt:null},list:{color:'#8C9B7A',position:0,deletedAt:null},rule:{active:true,reminderTime:null,deletedAt:null}};
+const defaults={task:{note:'',listId:INBOX_ID,dueDate:null,dueTime:null,reminderAtUtc:null,reminderTimezone:null,plannedForDate:null,completedAt:null,completionId:null,successorId:null,recurrenceRuleId:null,occurrenceDate:null,position:0,deletedAt:null},list:{color:'#8C9B7A',position:0,deletedAt:null},rule:{active:true,reminderTime:null,deletedAt:null}};
 function prepareReferences(store,type,value){
  if(type!=='task')return value;
  if(value.listId!==INBOX_ID){const list=store.getEntity('list',value.listId);if(!list||list.deletedAt)value.listId=INBOX_ID;}
@@ -38,7 +38,7 @@ function applyOperation(store,op,changes){
    const date=nextOccurrence(rule,current.dueDate,changes.completionDate);nextId=successorId(rule.id,date);
    const child=store.getEntity('task',nextId);
    if(child&&!child.deletedAt)fail('successor_exists','successorId');
-   childRevision=store.putEntity('task',nextId,{...defaults.task,title:current.title,note:current.note,listId:current.listId,listIds:current.listIds??[],position:current.position+1024,recurrenceRuleId:rule.id,dueDate:date,occurrenceDate:date,reminderAtUtc:nextReminderAt(rule,date),reminderTimezone:rule.reminderTime?rule.timezone:null});
+   childRevision=store.putEntity('task',nextId,{...defaults.task,title:current.title,note:current.note,listId:current.listId,listIds:current.listIds??[],position:current.position+1024,recurrenceRuleId:rule.id,dueDate:date,dueTime:current.dueTime??null,occurrenceDate:date,reminderAtUtc:nextReminderAt(rule,date),reminderTimezone:rule.reminderTime?rule.timezone:null});
   }
   store.putEntity('task',id,{...current,completedAt:now,completionId,successorId:nextId,successorCreatedRevision:childRevision});
   return {completionId,successorId:nextId};

@@ -1,0 +1,101 @@
+import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:crypto/crypto.dart';
+
+/// Release builds get their version from CI (`--dart-define=JUST_VERSION`);
+/// local builds have none and never look for updates.
+const appVersion = String.fromEnvironment('JUST_VERSION');
+
+const _latest = 'https://api.github.com/repos/me0wdes/just/releases/latest';
+const releasesPage = 'https://github.com/me0wdes/just/releases/latest';
+
+class AppUpdate {
+  final String version;
+  final Map<String, String> assets;
+  const AppUpdate(this.version, this.assets);
+}
+
+/// True when [a] is a newer `x.y.z` than [b].
+bool isNewer(String a, String b) {
+  List<int> parts(String v) =>
+      v.split('.').map((p) => int.tryParse(p) ?? 0).toList();
+  final x = parts(a), y = parts(b);
+  for (var i = 0; i < 3; i++) {
+    final d = (i < x.length ? x[i] : 0) - (i < y.length ? y[i] : 0);
+    if (d != 0) return d > 0;
+  }
+  return false;
+}
+
+/// The latest public release when it is newer than this build, else null.
+/// Network problems are silent: the next check simply tries again.
+Future<AppUpdate?> checkForUpdate() async {
+  if (appVersion.isEmpty || !(Platform.isWindows || Platform.isMacOS)) {
+    return null;
+  }
+  try {
+    final release = jsonDecode(utf8.decode(await _get(_latest))) as Map;
+    final version = (release['tag_name'] as String).replaceFirst('v', '');
+    if (!isNewer(version, appVersion)) return null;
+    return AppUpdate(version, {
+      for (final a in release['assets'] as List)
+        a['name'] as String: a['browser_download_url'] as String,
+    });
+  } catch (_) {
+    return null;
+  }
+}
+
+/// Windows (installed copy): downloads the setup, checks it against
+/// SHA256SUMS.txt and runs it silently; it closes Just and starts the new
+/// version. Everywhere else the download opens in the browser.
+/// Returns true when the installer took over and the app should quit.
+Future<bool> installUpdate(AppUpdate update) async {
+  final setup = 'Just-Setup-${update.version}.exe';
+  // Inno Setup leaves its uninstaller beside an installed copy; a copy
+  // unpacked from the zip has none and gets the release page instead.
+  final installed =
+      Platform.isWindows &&
+      File(
+        '${File(Platform.resolvedExecutable).parent.path}\\unins000.exe',
+      ).existsSync();
+  if (installed && update.assets[setup] != null) {
+    final bytes = await _get(update.assets[setup]!);
+    final sums = utf8.decode(await _get(update.assets['SHA256SUMS.txt']!));
+    final expected = RegExp('([0-9a-f]{64})\\s+\\*?${RegExp.escape(setup)}')
+        .firstMatch(sums)
+        ?.group(1);
+    if (expected == null || sha256.convert(bytes).toString() != expected) {
+      throw const FormatException('Обновление повреждено');
+    }
+    final file = File('${Directory.systemTemp.path}\\$setup');
+    await file.writeAsBytes(bytes);
+    await Process.start(file.path, [
+      '/SILENT',
+      '/SUPPRESSMSGBOXES',
+      '/NORESTART',
+    ], mode: ProcessStartMode.detached);
+    return true;
+  }
+  final dmg = update.assets['Just-${update.version}.dmg'];
+  final url = Platform.isMacOS && dmg != null ? dmg : releasesPage;
+  await Process.run(Platform.isMacOS ? 'open' : 'explorer', [url]);
+  return false;
+}
+
+Future<List<int>> _get(String url) async {
+  final client = HttpClient()..userAgent = 'Just/$appVersion';
+  try {
+    final response = await (await client.getUrl(Uri.parse(url))).close();
+    if (response.statusCode != 200) {
+      throw HttpException('HTTP ${response.statusCode}', uri: Uri.parse(url));
+    }
+    final bytes = BytesBuilder(copy: false);
+    await response.forEach(bytes.add);
+    return bytes.takeBytes();
+  } finally {
+    client.close();
+  }
+}

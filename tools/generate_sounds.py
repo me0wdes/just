@@ -54,6 +54,9 @@ for name, (duration, gain, voices) in sounds.items():
         t = i / RATE
         value = gain * sum(v(t) for v in voices)
         frames.append(struct.pack('<h', round(max(-1, min(1, value)) * 32767)))
+    # Windows Media Foundation can drop clips this short; a silent tail keeps
+    # every tone at 150 ms so it starts and reports completion reliably.
+    frames += [struct.pack('<h', 0)] * max(0, round(RATE * .15) - len(frames))
     with wave.open(str(folder / (name + '.wav')), 'wb') as wav:
         wav.setparams((1, 2, RATE, 0, 'NONE', 'not compressed'))
         wav.writeframes(b''.join(frames))

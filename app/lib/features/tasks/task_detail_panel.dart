@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import '../../theme/controls.dart';
 import '../../theme/day_icon.dart';
 
@@ -36,12 +38,11 @@ bool _same(Object? a, Object? b) =>
 
 class _TaskDetailPanelState extends State<TaskDetailPanel> {
   late TextEditingController title, note;
-  String? due, frequency;
+  String? due, dueTime, frequency;
   Set<String> listIds = {};
   String? reminderZone;
   DateTime? reminder;
   String? error;
-  bool busy = false;
   bool repeatTouched = false, plannedToday = false;
   Set<int> weekdays = {};
   late Map<String, Object?> baseline;
@@ -50,6 +51,7 @@ class _TaskDetailPanelState extends State<TaskDetailPanel> {
     'title': title.text,
     'note': note.text,
     'dueDate': due,
+    'dueTime': due == null ? null : dueTime,
     // Sorted so the same set always compares equal against the baseline.
     'listIds': (listIds.toList()..sort()),
     'plannedForDate': plannedToday
@@ -68,9 +70,10 @@ class _TaskDetailPanelState extends State<TaskDetailPanel> {
     final generation = ++loadGeneration;
     repeatTouched = false;
     frequency = null;
-    title = TextEditingController(text: widget.task.title);
-    note = TextEditingController(text: widget.task.note);
+    title = TextEditingController(text: widget.task.title)..addListener(_typed);
+    note = TextEditingController(text: widget.task.note)..addListener(_typed);
     due = widget.task.dueDate?.toString();
+    dueTime = widget.task.dueTime;
     listIds = {...widget.task.listIds};
     reminder = widget.task.reminderAtUtc;
     reminderZone = widget.task.reminderTimezone;
@@ -97,6 +100,8 @@ class _TaskDetailPanelState extends State<TaskDetailPanel> {
   void didUpdateWidget(covariant TaskDetailPanel old) {
     super.didUpdateWidget(old);
     if (old.task.id != widget.task.id) {
+      // Pending typing belongs to the previous task.
+      flush(old.task.id);
       title.dispose();
       note.dispose();
       load();
@@ -105,6 +110,7 @@ class _TaskDetailPanelState extends State<TaskDetailPanel> {
 
   @override
   void dispose() {
+    flush(widget.task.id);
     title.dispose();
     note.dispose();
     super.dispose();
@@ -116,61 +122,166 @@ class _TaskDetailPanelState extends State<TaskDetailPanel> {
     firstDate: DateTime(2020),
     lastDate: DateTime(2100),
   );
-  Future<void> save() async {
-    setState(() {
-      busy = true;
-      error = null;
-    });
-    try {
-      final changes = {
-        for (final entry in draft().entries)
-          if (!_same(entry.value, baseline[entry.key])) entry.key: entry.value,
-      };
-      if (changes.isNotEmpty) {
-        await widget.controller.patchTask(widget.task.id, changes);
-      }
-      final reminderChanged =
-          changes.containsKey('reminderAtUtc') ||
-          changes.containsKey('reminderTimezone');
-      final current = await widget.controller.repository.readTask(
-        widget.task.id,
-      );
-      if (current != null &&
-          (repeatTouched ||
-              (reminderChanged && current.recurrenceRuleId != null))) {
-        final existing = current.recurrenceRuleId == null
-            ? null
-            : await widget.controller.repository.readRule(
-                current.recurrenceRuleId!,
-              );
-        await widget.controller.setRecurrence(
-          current,
-          repeatTouched
-              ? (frequency == 'none' ? null : frequency)
-              : existing?.frequency,
-          weekdays: repeatTouched ? (weekdays.toList()..sort()) : null,
-        );
-      }
-      if (mounted) widget.onClose();
-    } catch (e) {
-      if (mounted) {
-        setState(
-          () => error = e is FormatException
-              ? e.message
-              : 'Не удалось сохранить изменения',
-        );
-      }
-    } finally {
-      if (mounted) setState(() => busy = false);
+  // Autosave: pickers save at once, typing after a short pause, and
+  // anything pending is flushed when the panel closes or switches task.
+  Timer? _typing;
+  Future<void> _queue = Future.value();
+
+  void _typed() {
+    if (draftDiffers()) {
+      _typing?.cancel();
+      _typing = Timer(const Duration(milliseconds: 600), persist);
     }
   }
 
-  Future<void> pickReminder() async {
+  bool draftDiffers() =>
+      draft().entries.any((e) => !_same(e.value, baseline[e.key]));
+
+  /// Applies a change from a picker and saves it right away.
+  void change(VoidCallback update) {
+    setState(update);
+    persist();
+  }
+
+  void flush(String id) {
+    _typing?.cancel();
+    persist(id: id);
+  }
+
+  /// Saves only the fields that differ from what was last saved, in order,
+  /// so quick changes never overtake each other.
+  void persist({String? id}) {
+    _typing?.cancel();
+    final taskId = id ?? widget.task.id;
+    final snapshot = draft();
+    final changes = {
+      for (final e in snapshot.entries)
+        if (!_same(e.value, baseline[e.key])) e.key: e.value,
+    };
+    final repeat = repeatTouched
+        ? (frequency: frequency, weekdays: weekdays.toList()..sort())
+        : null;
+    if (changes.isEmpty && repeat == null) return;
+    baseline = {...baseline, ...changes};
+    repeatTouched = false;
+    final controller = widget.controller;
+    _queue = _queue.then((_) async {
+      try {
+        if (changes.isNotEmpty) await controller.patchTask(taskId, changes);
+        final reminderChanged =
+            changes.containsKey('reminderAtUtc') ||
+            changes.containsKey('reminderTimezone');
+        final current = await controller.repository.readTask(taskId);
+        if (current != null &&
+            (repeat != null ||
+                (reminderChanged && current.recurrenceRuleId != null))) {
+          final existing = current.recurrenceRuleId == null
+              ? null
+              : await controller.repository.readRule(current.recurrenceRuleId!);
+          await controller.setRecurrence(
+            current,
+            repeat != null
+                ? (repeat.frequency == 'none' ? null : repeat.frequency)
+                : existing?.frequency,
+            weekdays: repeat?.weekdays,
+          );
+        }
+        if (mounted && error != null) setState(() => error = null);
+      } catch (e) {
+        if (mounted) {
+          setState(
+            () => error = e is FormatException
+                ? e.message
+                : 'Не удалось сохранить изменения',
+          );
+        }
+      }
+    });
+  }
+
+  /// Local due moment, only when the due date has a time.
+  DateTime? dueAt() {
+    final time = dueTime;
+    if (due == null || time == null) return null;
+    final d = DateTime.parse(due!);
+    return DateTime(
+      d.year,
+      d.month,
+      d.day,
+      int.parse(time.substring(0, 2)),
+      int.parse(time.substring(3)),
+    );
+  }
+
+  /// Reminder presets relative to the due time, in minutes before it.
+  static const _before = {
+    0: 'В момент срока',
+    15: 'За 15 минут',
+    30: 'За 30 минут',
+    60: 'За 1 час',
+    1440: 'За день',
+  };
+
+  /// Minutes between the reminder and the due time when they form a preset.
+  int? reminderPreset() {
+    final at = dueAt(), r = reminder;
+    if (at == null || r == null) return null;
+    final minutes = at.difference(r.toLocal()).inMinutes;
+    return _before.containsKey(minutes) ? minutes : null;
+  }
+
+  /// A date, then an optional time: «Только дата» keeps the whole day.
+  Future<void> pickDue() async {
+    final day = await date();
+    if (day == null || !mounted) return;
+    final time = await showTimePicker(
+      context: context,
+      initialTime: dueTime == null
+          ? const TimeOfDay(hour: 9, minute: 0)
+          : TimeOfDay(
+              hour: int.parse(dueTime!.substring(0, 2)),
+              minute: int.parse(dueTime!.substring(3)),
+            ),
+      helpText: 'Время срока',
+      cancelText: 'Только дата',
+      confirmText: 'Готово',
+    );
+    if (!mounted) return;
+    final preset = reminderPreset();
+    change(() {
+      due = day.toIso8601String().substring(0, 10);
+      dueTime = time == null
+          ? null
+          : '${time.hour.toString().padLeft(2, '0')}:'
+                '${time.minute.toString().padLeft(2, '0')}';
+      // «За 30 минут» follows the due time when it moves.
+      final at = dueAt();
+      if (preset != null && at != null) {
+        reminder = at.subtract(Duration(minutes: preset)).toUtc();
+      }
+    });
+  }
+
+  /// Asks for notification access and the time zone; null when refused.
+  Future<String?> reminderAccess() async {
     if (widget.onRequestReminder != null &&
         !await widget.onRequestReminder!()) {
-      return;
+      return null;
     }
-    if (!mounted) return;
+    return (await FlutterTimezone.getLocalTimezone()).identifier;
+  }
+
+  Future<void> remindBefore(int minutes) async {
+    final zone = await reminderAccess();
+    final at = dueAt();
+    if (zone == null || at == null || !mounted) return;
+    reminderZone = zone;
+    change(() => reminder = at.subtract(Duration(minutes: minutes)).toUtc());
+  }
+
+  Future<void> pickReminder() async {
+    final zone = await reminderAccess();
+    if (zone == null || !mounted) return;
     final day = await date();
     if (day == null || !mounted) return;
     final time = await showTimePicker(
@@ -178,10 +289,8 @@ class _TaskDetailPanelState extends State<TaskDetailPanel> {
       initialTime: TimeOfDay.now(),
     );
     if (time == null || !mounted) return;
-    final zone = (await FlutterTimezone.getLocalTimezone()).identifier;
-    if (!mounted) return;
     reminderZone = zone;
-    setState(
+    change(
       () => reminder = DateTime(
         day.year,
         day.month,
@@ -299,6 +408,7 @@ class _TaskDetailPanelState extends State<TaskDetailPanel> {
                           DaySelect<String>(
                             value: listIds.firstOrNull ?? inboxId,
                             emptyValue: inboxId,
+                            arrow: false,
                             items: [
                               for (final list in widget.controller.lists)
                                 DaySelectItem(
@@ -306,7 +416,7 @@ class _TaskDetailPanelState extends State<TaskDetailPanel> {
                                   TaskController.listTitle(list),
                                 ),
                             ],
-                            onChanged: (id) => setState(
+                            onChanged: (id) => change(
                               () => listIds = id == inboxId ? {} : {id},
                             ),
                           ),
@@ -320,19 +430,14 @@ class _TaskDetailPanelState extends State<TaskDetailPanel> {
                                 : dueLabel(
                                     LocalDate.parse(due!),
                                     widget.controller.today(),
+                                    dueTime,
                                   ),
                             'Добавить',
-                            () async {
-                              final selected = await date();
-                              if (selected != null && mounted) {
-                                setState(
-                                  () => due = selected
-                                      .toIso8601String()
-                                      .substring(0, 10),
-                                );
-                              }
-                            },
-                            () => setState(() => due = null),
+                            pickDue,
+                            () => change(() {
+                              due = null;
+                              dueTime = null;
+                            }),
                           ),
                         ),
                         prop(
@@ -348,7 +453,7 @@ class _TaskDetailPanelState extends State<TaskDetailPanel> {
                               DaySelectItem('weekly', 'Каждую неделю'),
                               DaySelectItem('monthly', 'Каждый месяц'),
                             ],
-                            onChanged: (v) => setState(() {
+                            onChanged: (v) => change(() {
                               repeatTouched = true;
                               frequency = v;
                               if (v == 'weekly' && weekdays.isEmpty) {
@@ -373,7 +478,7 @@ class _TaskDetailPanelState extends State<TaskDetailPanel> {
                                   _DayToggle(
                                     label: days[day - 1],
                                     selected: weekdays.contains(day),
-                                    onTap: () => setState(() {
+                                    onTap: () => change(() {
                                       repeatTouched = true;
                                       weekdays.contains(day)
                                           ? weekdays.remove(day)
@@ -386,12 +491,41 @@ class _TaskDetailPanelState extends State<TaskDetailPanel> {
                         prop(
                           DayGlyph.bell,
                           'Напомнить',
-                          valueButton(
-                            reminderLabel,
-                            'Добавить',
-                            pickReminder,
-                            () => setState(() => reminder = null),
-                          ),
+                          // With a due time, reminders are offsets from it.
+                          dueAt() == null
+                              ? valueButton(
+                                  reminderLabel,
+                                  'Добавить',
+                                  pickReminder,
+                                  () => change(() => reminder = null),
+                                )
+                              : DaySelect<String>(
+                                  key: ValueKey('remind-$reminder-$dueTime'),
+                                  value: reminder == null
+                                      ? 'none'
+                                      : '${reminderPreset() ?? 'custom'}',
+                                  emptyValue: 'none',
+                                  items: [
+                                    const DaySelectItem(
+                                      'none',
+                                      'Без напоминания',
+                                    ),
+                                    for (final e in _before.entries)
+                                      DaySelectItem('${e.key}', e.value),
+                                    DaySelectItem(
+                                      'custom',
+                                      reminder != null &&
+                                              reminderPreset() == null
+                                          ? reminderLabel!
+                                          : 'Своё время',
+                                    ),
+                                  ],
+                                  onChanged: (v) => switch (v) {
+                                    'none' => change(() => reminder = null),
+                                    'custom' => pickReminder(),
+                                    _ => remindBefore(int.parse(v)),
+                                  },
+                                ),
                         ),
                       ],
                     ),
@@ -431,11 +565,6 @@ class _TaskDetailPanelState extends State<TaskDetailPanel> {
                         label: const Text('Удалить задачу'),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  DayButton(
-                    onPressed: busy ? null : save,
-                    label: const Text('Сохранить'),
                   ),
                 ],
               ),

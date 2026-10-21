@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
@@ -24,7 +25,11 @@ const _months = [
   'дек',
 ];
 
-String dueLabel(LocalDate due, LocalDate today) {
+/// «Завтра» or «Завтра, 13:00» when the due date has a time.
+String dueLabel(LocalDate due, LocalDate today, [String? time]) =>
+    time == null ? _dayLabel(due, today) : '${_dayLabel(due, today)}, $time';
+
+String _dayLabel(LocalDate due, LocalDate today) {
   final days = due.utc.difference(today.utc).inDays;
   if (days == 0) return 'Сегодня';
   if (days == 1) return 'Завтра';
@@ -60,23 +65,36 @@ class TaskRow extends StatefulWidget {
 
 class _TaskRowState extends State<TaskRow> {
   bool hovered = false;
+  Timer? _due;
+
+  @override
+  void dispose() {
+    _due?.cancel();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = DayColors.of(context);
     final theme = Theme.of(context);
     final task = widget.task;
     final today = widget.today ?? LocalDate.today();
-    final overdue =
-        task.dueDate != null &&
-        task.dueDate!.compareTo(today) < 0 &&
-        !task.completed;
+    final now = DateTime.now(), at = task.dueAt;
+    final overdue = task.isOverdue(today, now);
+    // Turns red at the due time without waiting for another rebuild.
+    _due?.cancel();
+    if (!overdue && !task.completed && task.dueDate == today && at != null) {
+      _due = Timer(at.difference(now), () {
+        if (mounted) setState(() {});
+      });
+    }
     final metaColor = overdue ? c.overdue : c.muted;
     final meta = <Widget>[
       if (task.dueDate != null) ...[
         DayIcon(DayGlyph.clock, size: 14, color: metaColor),
         const SizedBox(width: 6),
         Text(
-          dueLabel(task.dueDate!, today),
+          dueLabel(task.dueDate!, today, task.dueTime),
           style: theme.textTheme.bodySmall!.copyWith(color: metaColor),
         ),
       ],

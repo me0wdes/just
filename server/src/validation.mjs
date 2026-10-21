@@ -11,7 +11,7 @@ export function validateNote(v){if(typeof v!=='string')fail('invalid_type','note
 export function validateLocalDate(v){if(typeof v!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(v)||v<'0001-01-01'||!Number.isFinite(Date.parse(v+'T00:00:00Z'))||new Date(v+'T00:00:00Z').toISOString().slice(0,10)!==v)fail('invalid_date','date');return v;}
 function timestamp(v,field){if(typeof v!=='string'||!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,9})?Z$/.test(v)||!Number.isFinite(Date.parse(v)))fail('invalid_timestamp',field);validateLocalDate(v.slice(0,10));return v;}
 function zone(v){if(typeof v!=='string')fail('invalid_timezone','timezone');try{new Intl.DateTimeFormat('en',{timeZone:v});}catch{fail('invalid_timezone','timezone');}return v;}
-const taskFields=['title','note','listId','listIds','dueDate','reminderAtUtc','reminderTimezone','plannedForDate','position','recurrenceRuleId'];
+const taskFields=['title','note','listId','listIds','dueDate','dueTime','reminderAtUtc','reminderTimezone','plannedForDate','position','recurrenceRuleId'];
 const ruleFields=['frequency','weekdays','monthDay','timezone','reminderTime','active'];
 const listFields=['name','color','icon','position'];
 export function validateEntity(type,value,{snapshot=false,partial=false}={}){
@@ -34,7 +34,7 @@ export function validateEntity(type,value,{snapshot=false,partial=false}={}){
   else if(k==='weekdays'&&(!Array.isArray(v)||v.length<1||v.length>7||v.some(d=>!Number.isInteger(d)||d<1||d>7)||new Set(v).size!==v.length))fail('invalid_weekdays',k);
   else if(k==='monthDay'&&(!Number.isInteger(v)||v<1||v>31))fail('invalid_month_day',k);
   else if(k==='active'&&typeof v!=='boolean')fail('invalid_type',k);
-  else if(k==='reminderTime'&&v!==null&&(typeof v!=='string'||!/^([01]\d|2[0-3]):[0-5]\d$/.test(v)))fail('invalid_time',k);
+  else if((k==='reminderTime'||k==='dueTime')&&v!==null&&(typeof v!=='string'||!/^([01]\d|2[0-3]):[0-5]\d$/.test(v)))fail('invalid_time',k);
  }
  if(!partial){
   if(type==='task'&&!('title'in out))fail('title_empty','title');

@@ -35,8 +35,11 @@ bool FlutterWindow::OnCreate() {
   platform_channel_->SetMethodCallHandler([](const auto& call, auto result) {
     if (call.method_name() == "feedbackAllowed") {
       QUERY_USER_NOTIFICATION_STATE state;
-      const bool allowed = SUCCEEDED(SHQueryUserNotificationState(&state)) &&
-                           state == QUNS_ACCEPTS_NOTIFICATIONS;
+      // Tones answer the user's own clicks, so only presentation mode mutes
+      // them. QUNS_BUSY also covers any full-screen window, including Just
+      // itself, which silenced sounds at random.
+      const bool allowed = FAILED(SHQueryUserNotificationState(&state)) ||
+                           state != QUNS_PRESENTATION_MODE;
       result->Success(flutter::EncodableValue(allowed));
     } else if (call.method_name() == "hasPackageIdentity") {
       UINT32 length = 0;

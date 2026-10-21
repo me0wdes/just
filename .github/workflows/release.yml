@@ -32,7 +32,7 @@ jobs:
         shell: pwsh
         run: |
           $version = '${{ github.ref_name }}'.TrimStart('v')
-          flutter build windows --release --no-pub --build-name $version
+          flutter build windows --release --no-pub --build-name $version --dart-define=JUST_VERSION=$version
           if ($LASTEXITCODE -ne 0) { throw 'Windows build failed' }
           $runner = 'build/windows/x64/runner/Release'
           # App-local VC runtime, so the zip runs without the redistributable.
@@ -62,7 +62,7 @@ jobs:
       - name: Build
         run: |
           version="${GITHUB_REF_NAME#v}"
-          flutter build macos --release --build-name "$version"
+          flutter build macos --release --build-name "$version" --dart-define=JUST_VERSION="$version"
           mkdir -p ../dist
           ditto -c -k --keepParent build/macos/Build/Products/Release/Just.app "../dist/Just-$version-macOS.zip"
           # Disk image with the usual «drag to Applications» layout.
@@ -92,5 +92,7 @@ jobs:
             **Синхронизация (по желанию):** поставьте свой сервер одной командой на Linux-сервере
             `curl -fsSL https://raw.githubusercontent.com/me0wdes/just/main/server/install.sh | sudo bash`
             и вставьте строку подключения в Just: Настройки → Хранение данных → Свой сервер. Без сервера всё работает на устройстве.
+
+            Обновления приходят сами: Just раз в несколько часов проверяет новые версии и предлагает обновиться. На Windows установщик ставит новую версию и перезапускает Just. Свой сервер обновляется сам каждую ночь.
 
             Контрольные суммы — в SHA256SUMS.txt.

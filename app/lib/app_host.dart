@@ -17,9 +17,11 @@ import 'features/tasks/task_controller.dart';
 import 'platform/feedback_service.dart';
 import 'platform/reminder_service.dart';
 import 'platform/secure_connection_store.dart';
+import 'platform/update_service.dart';
 import 'sync/connection_service.dart';
 import 'sync/sync_engine.dart';
 import 'sync/sync_transport.dart';
+import 'theme/motion_tokens.dart';
 
 class DayHost extends StatefulWidget {
   final AppDatabase rootDatabase, taskDatabase;
@@ -50,7 +52,7 @@ class _DayHostState extends State<DayHost> with WidgetsBindingObserver {
   late ConnectionService connections;
   SyncEngine? engine;
   ConnectionSecret? secret;
-  final audio = AssetCompletionAudio();
+  final audio = AssetCompletionAudio()..preload();
   late final NotificationPort notifications;
   late ReminderService reminders;
   final navigatorKey = GlobalKey<NavigatorState>();
@@ -71,6 +73,53 @@ class _DayHostState extends State<DayHost> with WidgetsBindingObserver {
       controller.requestOpen(id);
     });
     configure();
+    checkUpdates();
+    updates = Timer.periodic(const Duration(hours: 6), (_) => checkUpdates());
+  }
+
+  Timer? updates;
+  String? _offeredUpdate;
+
+  /// A new public release is offered once per version and session.
+  Future<void> checkUpdates() async {
+    final update = await checkForUpdate();
+    if (!mounted || update == null || update.version == _offeredUpdate) return;
+    _offeredUpdate = update.version;
+    final context = navigatorKey.currentContext;
+    if (context == null || !context.mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(
+      SnackBar(
+        persist: false,
+        duration: const Duration(seconds: 12),
+        content: Text('Вышла версия ${update.version}'),
+        action: SnackBarAction(
+          label: 'Обновить',
+          onPressed: () async {
+            messenger.showSnackBar(
+              const SnackBar(
+                persist: false,
+                duration: MotionTokens.toast,
+                content: Text('Загружаю обновление…'),
+              ),
+            );
+            try {
+              // The installer closes Just and opens the new version.
+              if (await installUpdate(update)) exit(0);
+            } catch (_) {
+              _offeredUpdate = null;
+              messenger.showSnackBar(
+                const SnackBar(
+                  persist: false,
+                  duration: MotionTokens.toast,
+                  content: Text('Не удалось обновить, попробуем позже'),
+                ),
+              );
+            }
+          },
+        ),
+      ),
+    );
   }
 
   void configure() {
@@ -287,6 +336,7 @@ class _DayHostState extends State<DayHost> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    updates?.cancel();
     edits?.cancel();
     taskChanges?.cancel();
     taps?.cancel();

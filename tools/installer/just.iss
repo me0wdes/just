@@ -39,4 +39,4 @@ Name: "{autoprograms}\Just"; Filename: "{app}\day_planner.exe"
 Name: "{autodesktop}\Just"; Filename: "{app}\day_planner.exe"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\day_planner.exe"; Description: "{cm:LaunchProgram,Just}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\day_planner.exe"; Description: "{cm:LaunchProgram,Just}"; Flags: nowait postinstall

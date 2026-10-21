@@ -46,7 +46,34 @@ class TaskItem {
   }
 
   LocalDate? get dueDate => _date('dueDate');
+
+  /// Optional "HH:MM" on [dueDate]; null means the whole day.
+  String? get dueTime => _data['dueTime'] as String?;
   LocalDate? get plannedForDate => _date('plannedForDate');
+
+  /// The local moment the task is due, only when [dueTime] is set.
+  DateTime? get dueAt {
+    final day = dueDate?.utc, time = dueTime;
+    if (day == null || time == null) return null;
+    return DateTime(
+      day.year,
+      day.month,
+      day.day,
+      int.parse(time.substring(0, 2)),
+      int.parse(time.substring(3)),
+    );
+  }
+
+  /// Past its due day, or today past its due time.
+  bool isOverdue(LocalDate today, DateTime now) {
+    final due = dueDate;
+    if (due == null || completed) return false;
+    final order = due.compareTo(today);
+    if (order != 0) return order < 0;
+    final at = dueAt;
+    return at != null && !now.isBefore(at);
+  }
+
   LocalDate? get occurrenceDate => _date('occurrenceDate');
   LocalDate? _date(String field) =>
       _data[field] == null ? null : LocalDate.parse(_data[field] as String);

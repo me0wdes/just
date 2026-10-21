@@ -101,7 +101,9 @@ void main() {
         }),
       );
       await tester.enterText(find.byType(TextField).at(1), 'Только заметка');
-      await tester.tap(find.text('Сохранить'));
+      // Typing saves itself after a short pause; there is no Save button.
+      expect(find.text('Сохранить'), findsNothing);
+      await tester.pump(const Duration(seconds: 1));
       await tester.pumpAndSettle();
       final saved = (await repo.readTask(id))!;
       expect(saved.title, 'С другого устройства');

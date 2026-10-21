@@ -72,11 +72,12 @@ void main() {
               title: title,
               listId: inboxId,
               fields: {
-                if (list != inboxId) 'listIds': [list, if (list == work) home],
+                if (list != inboxId) 'listIds': [list],
                 'plannedForDate': today.toString(),
                 'position': (position++) * 1024,
                 if (note.isNotEmpty) 'note': note,
                 'dueDate': ?due,
+                if (title.startsWith('Созвон')) 'dueTime': '13:00',
               },
             ),
           );

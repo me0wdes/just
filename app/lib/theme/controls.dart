@@ -291,6 +291,9 @@ class DaySelect<T> extends StatefulWidget {
   /// The value that means «nothing chosen» (e.g. «Без повтора»); it is
   /// shown in the muted colour, as Figma «Выбор / Пусто=Да».
   final T? emptyValue;
+
+  /// Figma «Значение» rows (e.g. Список) look like plain values: no chevron.
+  final bool arrow;
   const DaySelect({
     super.key,
     required this.value,
@@ -298,6 +301,7 @@ class DaySelect<T> extends StatefulWidget {
     required this.onChanged,
     this.placeholder = 'Выбрать',
     this.emptyValue,
+    this.arrow = true,
   });
   @override
   State<DaySelect<T>> createState() => _DaySelectState<T>();
@@ -422,10 +426,10 @@ class _DaySelectState<T> extends State<DaySelect<T>>
                         : Colors.transparent,
                     borderRadius: BorderRadius.circular(10),
                   ),
+                  // Figma «Выбор» fills the row; the chevron sits at its end.
                   child: Row(
-                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Flexible(
+                      Expanded(
                         child: Text(
                           label ?? widget.placeholder,
                           maxLines: 1,
@@ -441,16 +445,22 @@ class _DaySelectState<T> extends State<DaySelect<T>>
                               ),
                         ),
                       ),
-                      const SizedBox(width: 6),
-                      AnimatedRotation(
-                        turns: showing ? .5 : 0,
-                        duration: MotionTokens.duration(
-                          context,
-                          MotionTokens.moderate,
+                      if (widget.arrow) ...[
+                        const SizedBox(width: 6),
+                        AnimatedRotation(
+                          turns: showing ? .5 : 0,
+                          duration: MotionTokens.duration(
+                            context,
+                            MotionTokens.moderate,
+                          ),
+                          curve: MotionTokens.easeOut,
+                          child: DayIcon(
+                            DayGlyph.down,
+                            size: 16,
+                            color: c.muted,
+                          ),
                         ),
-                        curve: MotionTokens.easeOut,
-                        child: DayIcon(DayGlyph.down, size: 16, color: c.muted),
-                      ),
+                      ],
                     ],
                   ),
                 ),

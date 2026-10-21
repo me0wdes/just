@@ -32,3 +32,8 @@ test('recurrence rejects invalid weekday and month day',()=>{
  assert.throws(()=>validateChanges(operation({entityType:'rule',changes:{frequency:'monthly',monthDay:32,timezone:'Europe/Moscow'}})),{code:'invalid_month_day'});
 });
 test('UTC timestamps from Dart retain microsecond precision',()=>{assert.deepEqual(validateChanges(operation({createdAt:'2026-10-19T10:00:00.123456Z'})),{title:'Личная задача'});});
+test('due time is optional HH:MM',()=>{
+ assert.doesNotThrow(()=>validateChanges(operation({kind:'patch',changes:{dueTime:'13:00'}})));
+ assert.doesNotThrow(()=>validateChanges(operation({kind:'patch',changes:{dueTime:null}})));
+ for(const dueTime of ['24:00','9:00','13:60']) assert.throws(()=>validateChanges(operation({kind:'patch',changes:{dueTime}})),{code:'invalid_time'});
+});

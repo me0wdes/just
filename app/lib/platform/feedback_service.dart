@@ -60,13 +60,22 @@ class NativeSoundPolicy implements SoundPolicy {
 /// A few preloaded players per tone, so quick taps overlap instead of cutting off.
 class AssetCompletionAudio implements CompletionAudio {
   final _pools = <String, Future<AudioPool>>{};
+  Future<AudioPool> _pool(String asset) => _pools[asset] ??= AudioPool.create(
+    source: AssetSource(asset),
+    maxPlayers: 3,
+  );
+
+  /// Loads every tone up front; a pool created on the first tap starts late
+  /// enough that a quick tap sound is lost.
+  void preload() {
+    for (final sound in UiSound.values) {
+      _pool(sound.asset).ignore();
+    }
+  }
+
   @override
   Future<void> play(String asset, double volume) async {
-    final pool = await (_pools[asset] ??= AudioPool.create(
-      source: AssetSource(asset),
-      maxPlayers: 3,
-    ));
-    await pool.start(volume: volume);
+    await (await _pool(asset)).start(volume: volume);
   }
 
   Future<void> close() async {

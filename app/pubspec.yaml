@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 0.2.3+6
+version: 0.2.4+7
 
 environment:
   sdk: ^3.13.5
@@ -48,7 +48,7 @@ dependencies:
   flutter_localizations:
     sdk: flutter
   flutter_timezone: ^5.1.1
-  flutter_svg: ^2.3.0
+  path_parsing: ^1.1.0
 
 dev_dependencies:
   flutter_test:
@@ -75,7 +75,6 @@ flutter:
   # the material Icons class.
   uses-material-design: true
   assets:
-    - assets/icons/itshover/
     - assets/licenses/
     - assets/sounds/
     - assets/fonts/OFL.txt

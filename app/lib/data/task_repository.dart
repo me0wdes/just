@@ -311,6 +311,7 @@ class SqliteTaskRepository implements TaskRepository {
             'listId',
             'listIds',
             'dueDate',
+            'dueTime',
             'reminderAtUtc',
             'reminderTimezone',
             'plannedForDate',
@@ -381,6 +382,10 @@ class SqliteTaskRepository implements TaskRepository {
       if (changes.containsKey('listIds')) validateListIds(changes['listIds']);
       for (final key in ['dueDate', 'plannedForDate']) {
         if (changes[key] != null) LocalDate.parse(changes[key] as String);
+      }
+      if (changes['dueTime'] case final Object time
+          when !RegExp(r'^(?:[01]\d|2[0-3]):[0-5]\d$').hasMatch('$time')) {
+        throw const FormatException('Неверное время');
       }
       if (type == 'list' && id == inboxId) {
         throw const FormatException('Входящие нельзя изменить');

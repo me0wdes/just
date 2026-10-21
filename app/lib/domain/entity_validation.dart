@@ -12,6 +12,7 @@ const taskSnapshotFields = {
   'listId',
   'listIds',
   'dueDate',
+  'dueTime',
   'plannedForDate',
   'reminderAtUtc',
   'reminderTimezone',
@@ -142,10 +143,10 @@ Map<String, Object?> validateSnapshot(String type, Map<String, Object?> value) {
       throw const FormatException('Неверный день месяца');
     } else if (k == 'active' && v is! bool) {
       throw const FormatException('Неверное состояние повтора');
-    } else if (k == 'reminderTime' &&
+    } else if (['reminderTime', 'dueTime'].contains(k) &&
         v != null &&
         (v is! String || !RegExp(r'^(?:[01]\d|2[0-3]):[0-5]\d$').hasMatch(v))) {
-      throw const FormatException('Неверное время напоминания');
+      throw const FormatException('Неверное время');
     }
   }
   if (!out.containsKey('id')) throw const FormatException('Нет id записи');
