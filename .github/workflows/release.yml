@@ -15,7 +15,9 @@ env:
 
 jobs:
   windows:
-    runs-on: windows-latest
+    # VS 2022: a plugin still includes <experimental/coroutine>, which the
+    # VS 2026 STL on windows-latest rejects (STL1011).
+    runs-on: windows-2022
     defaults: { run: { working-directory: app } }
     steps:
       - uses: actions/checkout@v4
@@ -31,11 +33,14 @@ jobs:
         run: |
           $version = '${{ github.ref_name }}'.TrimStart('v')
           flutter build windows --release --no-pub --build-name $version
+          if ($LASTEXITCODE -ne 0) { throw 'Windows build failed' }
           $runner = 'build/windows/x64/runner/Release'
           # App-local VC runtime, so the zip runs without the redistributable.
           $vs = & 'C:/Program Files (x86)/Microsoft Visual Studio/Installer/vswhere.exe' -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
           $redist = Get-ChildItem "$vs/VC/Redist/MSVC" -Directory | Where-Object { $_.Name -match '^\d+\.\d+\.\d+$' } | Sort-Object { [version]$_.Name } -Descending | Select-Object -First 1
-          Copy-Item "$($redist.FullName)/x64/Microsoft.VC143.CRT/*.dll" $runner
+          $crt = Get-ChildItem "$($redist.FullName)/x64" -Directory -Filter 'Microsoft.VC14*.CRT' | Select-Object -First 1
+          if (-not $crt) { throw 'VC runtime not found' }
+          Copy-Item "$($crt.FullName)/*.dll" $runner
           New-Item -ItemType Directory -Force ../dist | Out-Null
           Compress-Archive -Path "$runner/*" -DestinationPath "../dist/Just-$version-Windows.zip"
       - uses: actions/upload-artifact@v4
