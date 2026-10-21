@@ -12,7 +12,7 @@ GitHub: [me0wdes/claude-work → Just](https://github.com/me0wdes/claude-work/tr
 
 Готовая Windows-версия 0.2.0: [скачать ZIP](https://github.com/me0wdes/claude-work/raw/refs/heads/main/Artifacts/Just/0.2.0/Just-0.2.0-Windows.zip). Репозиторий приватный, поэтому для скачивания нужен вход в GitHub. Распаковать архив целиком и открыть day_planner.exe. Локальные сборки находятся в `releases/0.2.0`; для системных напоминаний предусмотрен MSIX, установка доверия личному сертификату выполняется только пользователем.
 
-[Установка и подключение](docs/installation.md) · [review и исправления](docs/review-2026-10-19.md) · [фактическая проверка](docs/verification.md) · [сервис](server/README.md) · [разработка](docs/development.md).
+[Свой сервер синхронизации](docs/self-hosting.md) · [Установка и подключение](docs/installation.md) · [review и исправления](docs/review-2026-10-19.md) · [фактическая проверка](docs/verification.md) · [сервис](server/README.md) · [разработка](docs/development.md).
 
 ## Дизайн
 

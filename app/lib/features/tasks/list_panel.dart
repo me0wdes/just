@@ -29,40 +29,15 @@ class ListPanel extends StatelessWidget {
   /// Sync status shown quietly above settings.
   final Widget? status;
   Future<void> edit(BuildContext context, {TaskList? list}) async {
-    final text = TextEditingController(text: list?.name);
     DaySound.play(context, UiSound.open);
-    final name = await showDialog<String>(
+    final result = await showDialog<(String, String)>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(list == null ? 'Новый список' : 'Название списка'),
-        content: SizedBox(
-          width: 360,
-          child: TextField(
-            controller: text,
-            autofocus: true,
-            maxLength: 500,
-            decoration: const InputDecoration(hintText: 'Например, Дом'),
-            onSubmitted: (s) => Navigator.pop(context, s),
-          ),
-        ),
-        actions: [
-          FluidButton.text(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Отмена'),
-          ),
-          FluidButton(
-            onPressed: () => Navigator.pop(context, text.text),
-            child: const Text('Сохранить'),
-          ),
-        ],
-      ),
+      builder: (_) => _ListDialog(list: list),
     );
-    text.dispose();
-    if (name != null && name.trim().isNotEmpty) {
-      await controller.saveList(list?.id, name);
-      if (context.mounted) {
-        DaySound.play(context, list == null ? UiSound.add : UiSound.tap);
-      }
+    if (result == null || result.$1.trim().isEmpty) return;
+    await controller.saveList(list?.id, result.$1, icon: result.$2);
+    if (context.mounted) {
+      DaySound.play(context, list == null ? UiSound.add : UiSound.tap);
     }
   }
 
@@ -138,7 +113,7 @@ class ListPanel extends StatelessWidget {
     for (final list in controller.lists) {
       item(
         TaskController.listTitle(list),
-        list.id == inboxId ? DayGlyph.note : DayGlyph.list,
+        list.id == inboxId ? DayGlyph.note : listGlyph(list.icon),
         q.view == TaskView.list && q.listId == list.id,
         () => controller.navigate(TaskView.list, listId: list.id),
         // Right click (long press on touch) instead of a «…» button.
@@ -150,6 +125,10 @@ class ListPanel extends StatelessWidget {
                   DayGlyph.note,
                   () => edit(context, list: list),
                 ),
+                DayMenuItem('Сменить иконку', listGlyph(list.icon), () async {
+                  final key = await showDayIconPicker(context, at, list.icon);
+                  if (key != null) await controller.setListIcon(list.id, key);
+                }),
                 DayMenuItem('Удалить список', DayGlyph.delete, () {
                   DaySound.play(context, UiSound.delete);
                   controller.deleteList(list.id);
@@ -317,6 +296,86 @@ class _NavItemState extends State<_NavItem> {
                 ),
               ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// «Новый список» / «Список»: name and icon together, as in Figma.
+class _ListDialog extends StatefulWidget {
+  final TaskList? list;
+  const _ListDialog({this.list});
+  @override
+  State<_ListDialog> createState() => _ListDialogState();
+}
+
+class _ListDialogState extends State<_ListDialog> {
+  late final name = TextEditingController(text: widget.list?.name);
+  late String icon = widget.list?.icon ?? 'stack';
+  @override
+  void dispose() {
+    name.dispose();
+    super.dispose();
+  }
+
+  void submit() => Navigator.pop(context, (name.text, icon));
+
+  @override
+  Widget build(BuildContext context) {
+    final c = DayColors.of(context);
+    final theme = Theme.of(context);
+    return Dialog(
+      child: SizedBox(
+        width: 400,
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                widget.list == null ? 'Новый список' : 'Список',
+                style: theme.textTheme.titleMedium!.copyWith(color: c.text),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: name,
+                autofocus: true,
+                maxLength: 500,
+                onSubmitted: (_) => submit(),
+                decoration: const InputDecoration(
+                  hintText: 'Например, Покупки',
+                  counterText: '',
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Иконка',
+                style: theme.textTheme.bodySmall!.copyWith(color: c.muted),
+              ),
+              const SizedBox(height: 8),
+              DayIconGrid(
+                selected: icon,
+                onPick: (key) => setState(() => icon = key),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  FluidButton.text(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Отмена'),
+                  ),
+                  const SizedBox(width: 8),
+                  FluidButton(
+                    onPressed: submit,
+                    child: Text(widget.list == null ? 'Создать' : 'Сохранить'),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
       ),

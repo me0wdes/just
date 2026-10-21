@@ -44,8 +44,8 @@ void main() {
         final db = AppDatabase.memory(workspaceId: 'sample');
         final repo = SqliteTaskRepository(db);
         final today = LocalDate.parse('2026-10-19');
-        await repo.execute(TaskCommand.createList(home, 'Дом'));
-        await repo.execute(TaskCommand.createList(work, 'Работа'));
+        await repo.execute(TaskCommand.createList(home, 'Дом', icon: 'home'));
+        await repo.execute(TaskCommand.createList(work, 'Работа', icon: 'work'));
         final samples = [
           (
             'Разобрать заметки за неделю',

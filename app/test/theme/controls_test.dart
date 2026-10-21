@@ -68,48 +68,4 @@ void main() {
     expect(find.text('Дом'), findsNothing);
     expect(find.text('Работа'), findsOneWidget);
   });
-
-  testWidgets('combobox toggles several lists and creates a new one', (
-    tester,
-  ) async {
-    var picked = <String>{'a'};
-    final created = <String>[];
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: dayTheme(Brightness.light),
-        home: Scaffold(
-          body: StatefulBuilder(
-            builder: (context, set) => Align(
-              alignment: Alignment.topLeft,
-              child: DayCombobox(
-                selected: picked,
-                items: [
-                  const DaySelectItem('a', 'Дом'),
-                  const DaySelectItem('b', 'Работа'),
-                  for (final n in created) DaySelectItem(n, n),
-                ],
-                onChanged: (v) => set(() => picked = v),
-                onCreate: (name) async {
-                  set(() => created.add(name));
-                  return name;
-                },
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-    await tester.tap(find.text('Дом'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Работа'));
-    await tester.pumpAndSettle();
-    // Toggling keeps the popup open for the next pick.
-    expect(picked, {'a', 'b'});
-    expect(find.text('Найти или создать'), findsOneWidget);
-    await tester.enterText(find.byType(TextField), 'Покупки');
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Создать «Покупки»'));
-    await tester.pumpAndSettle();
-    expect(picked, {'a', 'b', 'Покупки'});
-  });
 }

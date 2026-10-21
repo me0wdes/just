@@ -70,6 +70,9 @@ class TaskList {
   String get id => _data['id'] as String;
   String get name => _data['name'] as String;
   String get color => _data['color'] as String? ?? '#8C9B7A';
+
+  /// Key of an ItsHover list icon (`list-<key>.svg`); older lists have none.
+  String get icon => _data['icon'] as String? ?? 'stack';
   bool get deleted => _data['deletedAt'] != null;
   double get position => (_data['position'] as num? ?? 0).toDouble();
   Map<String, Object?> toJson() => Map.of(_data);

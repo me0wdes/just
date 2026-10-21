@@ -43,8 +43,13 @@ jobs:
           Copy-Item "$($crt.FullName)/*.dll" $runner
           New-Item -ItemType Directory -Force ../dist | Out-Null
           Compress-Archive -Path "$runner/*" -DestinationPath "../dist/Just-$version-Windows.zip"
+          # Installer: Inno Setup ships with the windows-2022 image.
+          $iscc = 'C:/Program Files (x86)/Inno Setup 6/ISCC.exe'
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress | Out-Null }
+          & $iscc /Q "/DAppVersion=$version" "/DSourceDir=$((Resolve-Path $runner).Path)" "/DOutputDir=$((Resolve-Path ../dist).Path)" ../tools/installer/just.iss
+          if ($LASTEXITCODE -ne 0) { throw 'Installer build failed' }
       - uses: actions/upload-artifact@v4
-        with: { name: windows, path: dist/*.zip }
+        with: { name: windows, path: 'dist/*' }
 
   macos:
     runs-on: macos-latest
@@ -60,8 +65,13 @@ jobs:
           flutter build macos --release --build-name "$version"
           mkdir -p ../dist
           ditto -c -k --keepParent build/macos/Build/Products/Release/Just.app "../dist/Just-$version-macOS.zip"
+          # Disk image with the usual «drag to Applications» layout.
+          stage=$(mktemp -d)
+          cp -R build/macos/Build/Products/Release/Just.app "$stage/"
+          ln -s /Applications "$stage/Applications"
+          hdiutil create -volname Just -srcfolder "$stage" -ov -format UDZO "../dist/Just-$version.dmg"
       - uses: actions/upload-artifact@v4
-        with: { name: macos, path: dist/*.zip }
+        with: { name: macos, path: 'dist/*' }
 
   publish:
     needs: [windows, macos]
@@ -69,11 +79,18 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with: { path: dist, merge-multiple: true }
-      - run: cd dist && sha256sum *.zip > SHA256SUMS.txt
+      - run: cd dist && sha256sum *.zip *.exe *.dmg > SHA256SUMS.txt
       - uses: softprops/action-gh-release@v2
         with:
           files: dist/*
           body: |
-            **Windows:** скачайте `Just-…-Windows.zip`, распакуйте целиком и запустите `day_planner.exe`.
-            **macOS:** скачайте `Just-…-macOS.zip`, распакуйте и перетащите Just в «Программы». Сборка без подписи Apple: при первом запуске откройте через правый клик → «Открыть».
+            **Windows:** скачайте `Just-Setup-….exe` и запустите. Права администратора не нужны, Just появится в меню «Пуск». Без установки: `Just-…-Windows.zip`, распакуйте и запустите `day_planner.exe`.
+            Установщик пока без подписи: если Windows покажет «Неизвестный издатель», нажмите «Подробнее» → «Выполнить в любом случае».
+
+            **macOS:** откройте `Just-….dmg` и перетащите Just в «Программы». Сборка без подписи Apple: при первом запуске откройте через правый клик → «Открыть».
+
+            **Синхронизация (по желанию):** поставьте свой сервер одной командой на Linux-сервере
+            `curl -fsSL https://raw.githubusercontent.com/me0wdes/just/main/server/install.sh | sudo bash`
+            и вставьте строку подключения в Just: Настройки → Хранение данных → Свой сервер. Без сервера всё работает на устройстве.
+
             Контрольные суммы — в SHA256SUMS.txt.

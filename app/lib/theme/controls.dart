@@ -5,6 +5,7 @@ import '../platform/feedback_service.dart';
 import 'app_theme.dart';
 import 'day_icon.dart';
 import 'day_sound.dart';
+import 'fluid_surface.dart';
 import 'motion_tokens.dart';
 
 /// Controls after Fluid Functionalism: one 36px control height, surfaces
@@ -864,217 +865,80 @@ class _MenuPanelState extends State<_MenuPanel> {
   }
 }
 
-/// FF Combobox, multiple mode: chips in the trigger, a popup with a search
-/// field on top, checkbox rows that keep the popup open, contiguous checked
-/// rows sharing one merged background, and a create row appended last once
-/// the query matches nothing.
-class DayCombobox extends StatefulWidget {
-  final Set<String> selected;
-  final List<DaySelectItem<String>> items;
-  final ValueChanged<Set<String>> onChanged;
-  final Future<String?> Function(String name)? onCreate;
-  final String placeholder;
-  const DayCombobox({
-    super.key,
-    required this.selected,
-    required this.items,
-    required this.onChanged,
-    this.onCreate,
-    this.placeholder = 'Без списка',
-  });
+/// FF-style grid of list icons: 36px cells, a hover tint and a selected
+/// background; each icon plays its hover gesture under the pointer.
+class DayIconGrid extends StatelessWidget {
+  final String selected;
+  final ValueChanged<String> onPick;
+  const DayIconGrid({super.key, required this.selected, required this.onPick});
   @override
-  State<DayCombobox> createState() => _DayComboboxState();
+  Widget build(BuildContext context) => SizedBox(
+    width: 6 * controlHeight + 5 * 4,
+    child: Wrap(
+      spacing: 4,
+      runSpacing: 4,
+      children: [
+        for (final key in listIconKeys)
+          _IconCell(
+            key: ValueKey('list-icon-$key'),
+            glyph: listGlyph(key),
+            selected: key == selected,
+            onTap: () => onPick(key),
+          ),
+      ],
+    ),
+  );
 }
 
-class _DayComboboxState extends State<DayCombobox>
-    with SingleTickerProviderStateMixin {
-  final portal = OverlayPortalController();
-  final link = LayerLink();
-  final triggerKey = GlobalKey();
-  final query = TextEditingController();
-  final field = FocusNode();
-  late final popup = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 80),
-    reverseDuration: const Duration(milliseconds: 60),
-  );
-  bool hovered = false, closing = false;
-  int? highlight;
-  late Set<String> picked = {...widget.selected};
-
+class _IconCell extends StatefulWidget {
+  final DayGlyph glyph;
+  final bool selected;
+  final VoidCallback onTap;
+  const _IconCell({
+    super.key,
+    required this.glyph,
+    required this.selected,
+    required this.onTap,
+  });
   @override
-  void didUpdateWidget(DayCombobox old) {
-    super.didUpdateWidget(old);
-    if (!portal.isShowing) picked = {...widget.selected};
-  }
+  State<_IconCell> createState() => _IconCellState();
+}
 
-  @override
-  void dispose() {
-    popup.dispose();
-    query.dispose();
-    field.dispose();
-    super.dispose();
-  }
-
-  List<DaySelectItem<String>> get visible {
-    final q = query.text.trim().toLowerCase();
-    return [
-      for (final i in widget.items)
-        if (q.isEmpty || i.label.toLowerCase().contains(q)) i,
-    ];
-  }
-
-  bool get canCreate {
-    final q = query.text.trim();
-    return widget.onCreate != null &&
-        q.isNotEmpty &&
-        !widget.items.any((i) => i.label.toLowerCase() == q.toLowerCase());
-  }
-
-  void open() {
-    if (portal.isShowing) {
-      close();
-      return;
-    }
-    DaySound.play(context, UiSound.open);
-    picked = {...widget.selected};
-    query.clear();
-    highlight = 0;
-    closing = false;
-    portal.show();
-    MediaQuery.disableAnimationsOf(context)
-        ? popup.value = 1
-        : popup.forward(from: 0);
-    WidgetsBinding.instance.addPostFrameCallback((_) => field.requestFocus());
-    setState(() {});
-  }
-
-  Future<void> close() async {
-    if (!portal.isShowing || closing) return;
-    closing = true;
-    if (!MediaQuery.disableAnimationsOf(context)) await popup.reverse();
-    if (!mounted) return;
-    portal.hide();
-    setState(() => closing = false);
-  }
-
-  void toggle(String id) {
-    DaySound.play(
-      context,
-      picked.contains(id) ? UiSound.toggleOff : UiSound.toggleOn,
-    );
-    setState(() => picked.contains(id) ? picked.remove(id) : picked.add(id));
-    widget.onChanged({...picked});
-  }
-
-  Future<void> create() async {
-    final name = query.text.trim();
-    final id = await widget.onCreate?.call(name);
-    if (id == null || !mounted) return;
-    DaySound.play(context, UiSound.add);
-    query.clear();
-    setState(() => picked.add(id));
-    widget.onChanged({...picked});
-  }
-
-  void choose(int index) {
-    final rows = visible;
-    if (index < rows.length) {
-      toggle(rows[index].value);
-    } else if (canCreate) {
-      create();
-    }
-  }
-
-  KeyEventResult onKey(FocusNode _, KeyEvent e) {
-    if (e is! KeyDownEvent || !portal.isShowing) return KeyEventResult.ignored;
-    final n = visible.length + (canCreate ? 1 : 0);
-    if (n == 0) return KeyEventResult.ignored;
-    if (e.logicalKey == LogicalKeyboardKey.arrowDown) {
-      setState(() => highlight = ((highlight ?? -1) + 1) % n);
-    } else if (e.logicalKey == LogicalKeyboardKey.arrowUp) {
-      setState(() => highlight = ((highlight ?? n) - 1 + n) % n);
-    } else if (e.logicalKey == LogicalKeyboardKey.enter) {
-      if (highlight != null) choose(highlight!);
-    } else if (e.logicalKey == LogicalKeyboardKey.escape) {
-      close();
-    } else {
-      return KeyEventResult.ignored;
-    }
-    return KeyEventResult.handled;
-  }
-
+class _IconCellState extends State<_IconCell> {
+  bool hovered = false;
   @override
   Widget build(BuildContext context) {
     final c = DayColors.of(context);
-    final showing = portal.isShowing && !closing;
-    final chosen = [
-      for (final i in widget.items)
-        if ((portal.isShowing ? picked : widget.selected).contains(i.value)) i,
-    ];
-    return Focus(
-      onKeyEvent: onKey,
-      child: OverlayPortal(
-        controller: portal,
-        overlayChildBuilder: (_) => _popup(context),
-        child: CompositedTransformTarget(
-          link: link,
-          child: MouseRegion(
-            cursor: SystemMouseCursors.click,
-            onEnter: (_) => setState(() => hovered = true),
-            onExit: (_) => setState(() => hovered = false),
-            child: GestureDetector(
-              key: triggerKey,
-              behavior: HitTestBehavior.opaque,
-              onTap: open,
-              child: Semantics(
-                button: true,
-                value: chosen.isEmpty
-                    ? widget.placeholder
-                    : chosen.map((i) => i.label).join(', '),
-                child: AnimatedContainer(
-                  duration: MotionTokens.duration(context, MotionTokens.fast),
-                  constraints: const BoxConstraints(minHeight: controlHeight),
-                  padding: const EdgeInsets.fromLTRB(6, 6, 8, 6),
-                  decoration: BoxDecoration(
-                    color: hovered || showing
-                        ? overlay(context, .05, .07)
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Flexible(
-                        child: chosen.isEmpty
-                            ? Padding(
-                                padding: const EdgeInsets.only(left: 4),
-                                child: Text(
-                                  widget.placeholder,
-                                  style: Theme.of(context).textTheme.bodyMedium!
-                                      .copyWith(color: c.muted),
-                                ),
-                              )
-                            : Wrap(
-                                spacing: 4,
-                                runSpacing: 4,
-                                children: [
-                                  for (final i in chosen) _Chip(label: i.label),
-                                ],
-                              ),
-                      ),
-                      const SizedBox(width: 6),
-                      AnimatedRotation(
-                        turns: showing ? .5 : 0,
-                        duration: MotionTokens.duration(
-                          context,
-                          MotionTokens.moderate,
-                        ),
-                        curve: MotionTokens.easeOut,
-                        child: DayIcon(DayGlyph.down, size: 16, color: c.muted),
-                      ),
-                    ],
-                  ),
+    return Semantics(
+      button: true,
+      selected: widget.selected,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => setState(() => hovered = true),
+        onExit: (_) => setState(() => hovered = false),
+        child: FluidSurface(
+          sound: UiSound.tap,
+          pressScale: .9,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: widget.onTap,
+            child: AnimatedContainer(
+              duration: MotionTokens.duration(context, MotionTokens.fast),
+              width: controlHeight,
+              height: controlHeight,
+              decoration: BoxDecoration(
+                color: widget.selected
+                    ? overlay(context, .07, .10)
+                    : hovered
+                    ? overlay(context, .05, .07)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Center(
+                child: DayIcon(
+                  widget.glyph,
+                  size: 20,
+                  color: widget.selected || hovered ? c.text : c.muted,
                 ),
               ),
             ),
@@ -1083,250 +947,81 @@ class _DayComboboxState extends State<DayCombobox>
       ),
     );
   }
+}
 
-  Widget _popup(BuildContext context) {
+/// The icon picker as a popup at the pointer, in the menu skin.
+Future<String?> showDayIconPicker(
+  BuildContext context,
+  Offset position,
+  String current,
+) {
+  DaySound.play(context, UiSound.open);
+  return Navigator.of(context).push(_IconPickerRoute(position, current));
+}
+
+class _IconPickerRoute extends PopupRoute<String> {
+  final Offset position;
+  final String current;
+  _IconPickerRoute(this.position, this.current);
+  @override
+  Color? get barrierColor => null;
+  @override
+  bool get barrierDismissible => true;
+  @override
+  String? get barrierLabel => 'Закрыть выбор иконки';
+  @override
+  Duration get transitionDuration => const Duration(milliseconds: 80);
+  @override
+  Duration get reverseTransitionDuration => const Duration(milliseconds: 60);
+  @override
+  Widget buildPage(context, animation, secondaryAnimation) {
+    final size = MediaQuery.sizeOf(context);
+    const width = 6 * controlHeight + 5 * 4 + 16, height = 3 * 40 + 44.0;
+    final left = (position.dx + width > size.width - 8)
+        ? position.dx - width
+        : position.dx;
+    final top = (position.dy + height > size.height - 8)
+        ? position.dy - height
+        : position.dy;
     final c = DayColors.of(context);
-    final rows = visible;
-    final create = canCreate;
-    final count = rows.length + (create ? 1 : 0);
-    const row = controlHeight;
-    final fast = MotionTokens.duration(context, MotionTokens.fast);
-    final moderate = MotionTokens.duration(context, MotionTokens.moderate);
-    bool on(int i) =>
-        i >= 0 && i < rows.length && picked.contains(rows[i].value);
     return Stack(
       children: [
-        Positioned.fill(
-          child: GestureDetector(
-            behavior: HitTestBehavior.translucent,
-            onTap: close,
-          ),
-        ),
-        CompositedTransformFollower(
-          link: link,
-          targetAnchor: Alignment.bottomLeft,
-          offset: const Offset(0, 4),
-          child: Align(
-            alignment: Alignment.topLeft,
-            child: AnimatedBuilder(
-              animation: popup,
-              builder: (context, child) {
-                final t = Curves.easeOut.transform(popup.value);
-                return Opacity(
-                  opacity: t,
-                  child: Transform.translate(
-                    offset: Offset(0, -4 * (1 - t)),
-                    child: Transform(
-                      alignment: Alignment.topCenter,
-                      transform: Matrix4.diagonal3Values(1, .96 + .04 * t, 1),
-                      child: child,
+        Positioned(
+          left: left,
+          top: top,
+          child: Material(
+            type: MaterialType.transparency,
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(8, 12, 8, 8),
+              decoration: BoxDecoration(
+                color: c.screen,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: c.border),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x1f000000),
+                    blurRadius: 24,
+                    offset: Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(left: 6, bottom: 8),
+                    child: Text(
+                      'Иконка списка',
+                      style: Theme.of(context).textTheme.bodySmall!
+                          .copyWith(color: c.muted),
                     ),
                   ),
-                );
-              },
-              child: Material(
-                type: MaterialType.transparency,
-                child: Container(
-                  width: 240,
-                  decoration: BoxDecoration(
-                    color: c.screen,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: c.border),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color(0x1f000000),
-                        blurRadius: 24,
-                        offset: Offset(0, 8),
-                      ),
-                    ],
+                  DayIconGrid(
+                    selected: current,
+                    onPick: (key) => Navigator.pop(context, key),
                   ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // Search sits on top, its divider running edge to edge.
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-                        child: TextField(
-                          controller: query,
-                          focusNode: field,
-                          onChanged: (_) => setState(() => highlight = 0),
-                          onSubmitted: (_) {
-                            if (highlight != null) choose(highlight!);
-                            field.requestFocus();
-                          },
-                          style: Theme.of(context).textTheme.bodyMedium!
-                              .copyWith(color: c.text),
-                          cursorColor: c.text,
-                          decoration: InputDecoration(
-                            isCollapsed: true,
-                            filled: false,
-                            hintText: 'Найти или создать',
-                            hintStyle: TextStyle(color: c.muted),
-                            border: InputBorder.none,
-                            enabledBorder: InputBorder.none,
-                            focusedBorder: InputBorder.none,
-                          ),
-                        ),
-                      ),
-                      Divider(color: c.border, height: 1),
-                      ConstrainedBox(
-                        constraints: const BoxConstraints(maxHeight: 300),
-                        child: SingleChildScrollView(
-                          padding: const EdgeInsets.all(4),
-                          child: MouseRegion(
-                            onExit: (_) => setState(() => highlight = null),
-                            child: Stack(
-                              children: [
-                                // Checked runs share one merged background.
-                                for (var i = 0; i < rows.length; i++)
-                                  Positioned(
-                                    top: i * row,
-                                    left: 0,
-                                    right: 0,
-                                    height: row,
-                                    child: AnimatedContainer(
-                                      duration: moderate,
-                                      curve: MotionTokens.easeOut,
-                                      decoration: BoxDecoration(
-                                        color: on(i)
-                                            ? overlay(context, .07, .10)
-                                            : Colors.transparent,
-                                        borderRadius: BorderRadius.vertical(
-                                          top: Radius.circular(
-                                            on(i - 1) ? 0 : 8,
-                                          ),
-                                          bottom: Radius.circular(
-                                            on(i + 1) ? 0 : 8,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                AnimatedPositioned(
-                                  duration: fast,
-                                  curve: Curves.easeOut,
-                                  top: (highlight ?? 0).clamp(0, 999) * row,
-                                  left: 0,
-                                  right: 0,
-                                  height: row,
-                                  child: AnimatedOpacity(
-                                    opacity:
-                                        highlight == null || highlight! >= count
-                                        ? 0
-                                        : 1,
-                                    duration: fast,
-                                    child: DecoratedBox(
-                                      decoration: BoxDecoration(
-                                        color: overlay(context, .04, .06),
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    for (var i = 0; i < count; i++)
-                                      MouseRegion(
-                                        cursor: SystemMouseCursors.click,
-                                        onEnter: (_) =>
-                                            setState(() => highlight = i),
-                                        child: GestureDetector(
-                                          behavior: HitTestBehavior.opaque,
-                                          onTap: () => choose(i),
-                                          child: SizedBox(
-                                            height: row,
-                                            child: Padding(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    horizontal: 10,
-                                                  ),
-                                              child: i < rows.length
-                                                  ? Row(
-                                                      children: [
-                                                        _CheckBox(
-                                                          checked: on(i),
-                                                        ),
-                                                        const SizedBox(
-                                                          width: 8,
-                                                        ),
-                                                        Expanded(
-                                                          child: Text(
-                                                            rows[i].label,
-                                                            maxLines: 1,
-                                                            overflow:
-                                                                TextOverflow
-                                                                    .ellipsis,
-                                                            style:
-                                                                Theme.of(
-                                                                      context,
-                                                                    )
-                                                                    .textTheme
-                                                                    .bodyMedium!
-                                                                    .copyWith(
-                                                                      color: c
-                                                                          .text,
-                                                                    ),
-                                                          ),
-                                                        ),
-                                                      ],
-                                                    )
-                                                  : Row(
-                                                      children: [
-                                                        DayIcon(
-                                                          DayGlyph.add,
-                                                          size: 16,
-                                                          color: c.muted,
-                                                        ),
-                                                        const SizedBox(
-                                                          width: 8,
-                                                        ),
-                                                        Expanded(
-                                                          child: Text(
-                                                            'Создать «${query.text.trim()}»',
-                                                            maxLines: 1,
-                                                            overflow:
-                                                                TextOverflow
-                                                                    .ellipsis,
-                                                            style:
-                                                                Theme.of(
-                                                                      context,
-                                                                    )
-                                                                    .textTheme
-                                                                    .bodyMedium!
-                                                                    .copyWith(
-                                                                      color: c
-                                                                          .text,
-                                                                    ),
-                                                          ),
-                                                        ),
-                                                      ],
-                                                    ),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    if (count == 0)
-                                      SizedBox(
-                                        height: row,
-                                        child: Center(
-                                          child: Text(
-                                            'Списков пока нет',
-                                            style: TextStyle(color: c.muted),
-                                          ),
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                ],
               ),
             ),
           ),
@@ -1334,59 +1029,22 @@ class _DayComboboxState extends State<DayCombobox>
       ],
     );
   }
-}
 
-class _Chip extends StatelessWidget {
-  final String label;
-  const _Chip({required this.label});
   @override
-  Widget build(BuildContext context) {
-    final c = DayColors.of(context);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: overlay(context, .06, .11),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontFamily: 'Golos',
-          fontSize: 14,
-          height: 18 / 14,
-          color: c.text,
+  Widget buildTransitions(context, animation, secondaryAnimation, child) {
+    final t = CurvedAnimation(parent: animation, curve: Curves.easeOut);
+    if (MediaQuery.disableAnimationsOf(context)) {
+      return FadeTransition(opacity: animation, child: child);
+    }
+    return FadeTransition(
+      opacity: t,
+      child: AnimatedBuilder(
+        animation: t,
+        child: child,
+        builder: (context, child) => Transform.translate(
+          offset: Offset(0, -4 * (1 - t.value)),
+          child: child,
         ),
-      ),
-    );
-  }
-}
-
-/// FF CheckboxItem: a 16px outline with 5px corners that steps aside for
-/// the tick alone when checked.
-class _CheckBox extends StatelessWidget {
-  final bool checked;
-  const _CheckBox({required this.checked});
-  @override
-  Widget build(BuildContext context) {
-    final c = DayColors.of(context);
-    final fast = MotionTokens.duration(context, MotionTokens.fast);
-    return SizedBox(
-      width: 16,
-      height: 16,
-      child: Stack(
-        children: [
-          AnimatedOpacity(
-            opacity: checked ? 0 : 1,
-            duration: fast,
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(5),
-                border: Border.all(color: c.icon, width: 1.5),
-              ),
-            ),
-          ),
-          TickMark(shown: checked, color: c.text),
-        ],
       ),
     );
   }

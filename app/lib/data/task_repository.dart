@@ -344,6 +344,7 @@ class SqliteTaskRepository implements TaskRepository {
           changes = {
             'name': normalizeTitle(command.name),
             'color': command.color,
+            'icon': ?command.icon,
           };
         case PatchList():
           type = 'list';

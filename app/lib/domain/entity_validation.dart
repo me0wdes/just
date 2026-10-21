@@ -23,7 +23,14 @@ const taskSnapshotFields = {
   'completionId',
   'successorId',
 };
-const listSnapshotFields = {'id', 'name', 'color', 'position', 'deletedAt'};
+const listSnapshotFields = {
+  'id',
+  'name',
+  'color',
+  'icon',
+  'position',
+  'deletedAt',
+};
 const ruleSnapshotFields = {
   'id',
   'frequency',
@@ -90,6 +97,10 @@ Map<String, Object?> validateSnapshot(String type, Map<String, Object?> value) {
         (v != null || k == 'id')) {
       if (v is! String || !Uuid.isValidUUID(fromString: v)) {
         throw const FormatException('Неверная ссылка');
+      }
+    } else if (k == 'icon') {
+      if (v is! String || !RegExp(r'^[a-z]{1,20}$').hasMatch(v)) {
+        throw const FormatException('Неверная иконка');
       }
     } else if (k == 'listIds') {
       validateListIds(v);

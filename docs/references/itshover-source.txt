@@ -3,3 +3,5 @@ Revision: e5fc90512d9bcd8e6cba407ebf88cb9458989ca3
 Adapted JSX SVG geometry to static SVG; native Flutter motion is implemented separately.
 Stroke width normalized to 1.75 at 24px; original paths retained.
 License: Apache-2.0 (bundled in app/assets/licenses).
+
+List icons (list-*.svg, 2026-10-21): stack-3, home, travel-bag, shopping-cart, book, sparkles, heart, trophy, airplane, globe, code, camera, coffee, wallet, gamepad, paw-print, rocket, users. Same revision; static geometry, hover motion in Flutter.

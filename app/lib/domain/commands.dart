@@ -14,8 +14,12 @@ sealed class TaskCommand {
       UndoCompletion;
   factory TaskCommand.deleteTask(String id) = DeleteTask;
   factory TaskCommand.restoreTask(String id) = RestoreTask;
-  factory TaskCommand.createList(String id, String name, {String color}) =
-      CreateList;
+  factory TaskCommand.createList(
+    String id,
+    String name, {
+    String color,
+    String? icon,
+  }) = CreateList;
   factory TaskCommand.patchList(String id, Map<String, Object?> fields) =
       PatchList;
   factory TaskCommand.deleteList(String id) = DeleteList;
@@ -68,7 +72,8 @@ final class RestoreTask extends TaskCommand {
 
 final class CreateList extends TaskCommand {
   final String id, name, color;
-  const CreateList(this.id, this.name, {this.color = '#8C9B7A'});
+  final String? icon;
+  const CreateList(this.id, this.name, {this.color = '#8C9B7A', this.icon});
 }
 
 final class PatchList extends TaskCommand {

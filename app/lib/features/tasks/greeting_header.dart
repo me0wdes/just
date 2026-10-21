@@ -27,6 +27,7 @@ class FlowPalette {
     Color(0xfff4664d),
     Color(0xff8a2e5e),
   ], speed: 28);
+
   /// «Northern lights», aurora type.
   static const night = FlowPalette(
     [

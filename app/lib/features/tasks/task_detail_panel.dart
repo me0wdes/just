@@ -3,6 +3,7 @@ import '../../theme/day_icon.dart';
 
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 
 import '../../theme/motion_tokens.dart';
 
@@ -238,40 +239,14 @@ class _TaskDetailPanelState extends State<TaskDetailPanel> {
   }
 
   /// A value that opens a picker, with a clear button once it is set.
+  /// A value that opens a picker; its clear button shows on hover, as the
+  /// «Значение» hover variant in Figma.
   Widget valueButton(
     String? value,
     String empty,
     VoidCallback onTap,
     VoidCallback onClear,
-  ) {
-    final c = DayColors.of(context);
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Flexible(
-          child: DayButton(
-            onPressed: onTap,
-            kind: DayButtonKind.ghost,
-            sound: UiSound.open,
-            padding: 10,
-            label: Text(
-              value ?? empty,
-              style: TextStyle(
-                color: value == null ? c.muted : c.text,
-                fontWeight: FontWeight.w400,
-              ),
-            ),
-          ),
-        ),
-        if (value != null)
-          DayButton.icon(
-            tooltip: 'Убрать',
-            onPressed: onClear,
-            icon: DayIcon(DayGlyph.close, size: 16, color: c.muted),
-          ),
-      ],
-    );
-  }
+  ) => _ValueButton(value: value, empty: empty, onTap: onTap, onClear: onClear);
 
   @override
   Widget build(BuildContext context) {
@@ -339,16 +314,20 @@ class _TaskDetailPanelState extends State<TaskDetailPanel> {
                       children: [
                         prop(
                           DayGlyph.list,
-                          'Списки',
-                          DayCombobox(
-                            selected: listIds,
+                          'Список',
+                          // Figma: one list per task; «Без списка» clears it.
+                          DaySelect<String>(
+                            value: listIds.firstOrNull ?? inboxId,
                             items: [
                               for (final list in widget.controller.lists)
-                                if (list.id != inboxId)
-                                  DaySelectItem(list.id, list.name),
+                                DaySelectItem(
+                                  list.id,
+                                  TaskController.listTitle(list),
+                                ),
                             ],
-                            onChanged: (v) => setState(() => listIds = v),
-                            onCreate: widget.controller.createList,
+                            onChanged: (id) => setState(
+                              () => listIds = id == inboxId ? {} : {id},
+                            ),
                           ),
                         ),
                         prop(
@@ -506,4 +485,62 @@ class _DayToggle extends StatelessWidget {
       sound: selected ? UiSound.toggleOff : UiSound.toggleOn,
     ),
   );
+}
+
+class _ValueButton extends StatefulWidget {
+  final String? value;
+  final String empty;
+  final VoidCallback onTap, onClear;
+  const _ValueButton({
+    required this.value,
+    required this.empty,
+    required this.onTap,
+    required this.onClear,
+  });
+  @override
+  State<_ValueButton> createState() => _ValueButtonState();
+}
+
+class _ValueButtonState extends State<_ValueButton> {
+  bool hovered = false;
+  @override
+  Widget build(BuildContext context) {
+    final c = DayColors.of(context);
+    final touch = !RendererBinding.instance.mouseTracker.mouseIsConnected;
+    return MouseRegion(
+      onEnter: (_) => setState(() => hovered = true),
+      onExit: (_) => setState(() => hovered = false),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Flexible(
+            child: DayButton(
+              onPressed: widget.onTap,
+              kind: DayButtonKind.ghost,
+              sound: UiSound.open,
+              padding: 10,
+              label: Text(
+                widget.value ?? widget.empty,
+                style: TextStyle(
+                  color: widget.value == null ? c.muted : c.text,
+                  fontWeight: FontWeight.w400,
+                ),
+              ),
+            ),
+          ),
+          // Without a mouse there is no hover, so the button stays visible.
+          if (widget.value != null)
+            AnimatedOpacity(
+              opacity: hovered || touch ? 1 : 0,
+              duration: MotionTokens.duration(context, MotionTokens.fast),
+              child: DayButton.icon(
+                tooltip: 'Убрать',
+                onPressed: widget.onClear,
+                icon: DayIcon(DayGlyph.close, size: 16, color: c.muted),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }

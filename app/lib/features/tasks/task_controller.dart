@@ -157,12 +157,14 @@ class TaskController extends ChangeNotifier {
       repository.execute(TaskCommand.deleteTask(id));
   Future<CommandReceipt> restoreTask(String id) =>
       repository.execute(TaskCommand.restoreTask(id));
-  Future<CommandReceipt> saveList(String? id, String name) =>
+  Future<CommandReceipt> saveList(String? id, String name, {String? icon}) =>
       repository.execute(
         id == null
-            ? TaskCommand.createList(const Uuid().v4(), name)
-            : TaskCommand.patchList(id, {'name': name}),
+            ? TaskCommand.createList(const Uuid().v4(), name, icon: icon)
+            : TaskCommand.patchList(id, {'name': name, 'icon': ?icon}),
       );
+  Future<CommandReceipt> setListIcon(String id, String icon) =>
+      repository.execute(TaskCommand.patchList(id, {'icon': icon}));
 
   /// Creates a list and returns its id, for the combobox «Создать».
   Future<String> createList(String name) async {

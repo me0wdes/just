@@ -13,7 +13,7 @@ function timestamp(v,field){if(typeof v!=='string'||!/^\d{4}-\d\d-\d\dT\d\d:\d\d
 function zone(v){if(typeof v!=='string')fail('invalid_timezone','timezone');try{new Intl.DateTimeFormat('en',{timeZone:v});}catch{fail('invalid_timezone','timezone');}return v;}
 const taskFields=['title','note','listId','listIds','dueDate','reminderAtUtc','reminderTimezone','plannedForDate','position','recurrenceRuleId'];
 const ruleFields=['frequency','weekdays','monthDay','timezone','reminderTime','active'];
-const listFields=['name','color','position'];
+const listFields=['name','color','icon','position'];
 export function validateEntity(type,value,{snapshot=false,partial=false}={}){
  const allowed=type==='task'?taskFields:type==='list'?listFields:type==='rule'?ruleFields:null;
  if(!allowed)fail('invalid_entity_type','entityType');
@@ -28,6 +28,7 @@ export function validateEntity(type,value,{snapshot=false,partial=false}={}){
   else if(['reminderAtUtc','completedAt','deletedAt'].includes(k)&&v!==null)timestamp(v,k);
   else if(['timezone','reminderTimezone'].includes(k)&&v!==null)zone(v);
   else if(k==='position'&&(!Number.isFinite(v)||Math.abs(v)>Number.MAX_SAFE_INTEGER))fail('invalid_position',k);
+  else if(k==='icon'&&(typeof v!=='string'||!/^[a-z]{1,20}$/.test(v)))fail('invalid_icon',k);
   else if(k==='color'&&(typeof v!=='string'||!/^#[0-9a-f]{6}$/i.test(v)))fail('invalid_color',k);
   else if(k==='frequency'&&!['daily','weekly','monthly'].includes(v))fail('invalid_frequency',k);
   else if(k==='weekdays'&&(!Array.isArray(v)||v.length<1||v.length>7||v.some(d=>!Number.isInteger(d)||d<1||d>7)||new Set(v).size!==v.length))fail('invalid_weekdays',k);

@@ -88,4 +88,43 @@ void main() {
     c.dispose();
     await db.close();
   });
+
+  testWidgets('list icon changes from the menu and on creation', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final db = AppDatabase.memory(workspaceId: 'local');
+    final repo = SqliteTaskRepository(db);
+    const home = '6f0c2a54-4b9e-4f6b-9a51-0d3c7e1a2b01';
+    await repo.execute(TaskCommand.createList(home, 'Дом'));
+    final c = TaskController(
+      repo,
+      feedback: const SilentCompletionFeedback(),
+      today: () => LocalDate.parse('2026-10-19'),
+    );
+    await tester.pumpWidget(MaterialApp(home: TaskHome(controller: c)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Дом'), buttons: kSecondaryButton);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Сменить иконку'));
+    await tester.pumpAndSettle();
+    expect(find.text('Иконка списка'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('list-icon-home')));
+    await tester.pumpAndSettle();
+    expect(c.lists.firstWhere((l) => l.id == home).icon, 'home');
+    // A new list gets its icon in the same dialog as its name.
+    await tester.tap(find.text('Новый список'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, 'Покупки');
+    await tester.tap(find.byKey(const ValueKey('list-icon-cart')));
+    await tester.tap(find.text('Создать'));
+    await tester.pumpAndSettle();
+    expect(c.lists.firstWhere((l) => l.name == 'Покупки').icon, 'cart');
+    await tester.pumpWidget(const SizedBox());
+    c.dispose();
+    await db.close();
+  });
 }
