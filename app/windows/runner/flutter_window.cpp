@@ -46,12 +46,18 @@ bool FlutterWindow::OnCreate() {
       const auto status = GetCurrentPackageFullName(&length, nullptr);
       result->Success(flutter::EncodableValue(status == ERROR_INSUFFICIENT_BUFFER));
     } else if(call.method_name() == "notificationSetting") {
+      using winrt::Windows::UI::Notifications::ToastNotificationManager;
+      // Packaged builds have an identity; the installer build is known to
+      // Windows by the AppUserModelID the notification plugin registers.
+      int setting = -1;
       try {
-        const auto notifier = winrt::Windows::UI::Notifications::ToastNotificationManager::CreateToastNotifier();
-        result->Success(flutter::EncodableValue(static_cast<int>(notifier.Setting())));
+        setting = static_cast<int>(ToastNotificationManager::CreateToastNotifier().Setting());
       } catch(const winrt::hresult_error&) {
-        result->Success(flutter::EncodableValue(-1));
+        try {
+          setting = static_cast<int>(ToastNotificationManager::CreateToastNotifier(L"ClaudeWork.Day").Setting());
+        } catch(const winrt::hresult_error&) {}
       }
+      result->Success(flutter::EncodableValue(setting));
     } else { result->NotImplemented(); }
   });
   SetChildContent(flutter_controller_->view()->GetNativeWindow());

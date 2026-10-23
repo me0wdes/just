@@ -12,6 +12,8 @@ import '../../theme/segments.dart';
 import '../../platform/file_dialogs.dart';
 import 'settings_controller.dart';
 import 'import_preview.dart';
+import '../../theme/fluid_surface.dart';
+import '../../platform/update_service.dart';
 
 class SettingsPanel extends StatefulWidget {
   final SettingsController settings;
@@ -182,27 +184,47 @@ class _SettingsPanelState extends State<SettingsPanel> {
                         child: widget.connectionPanel!,
                       ),
                     section('Данные', [
-                      ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: const DayIcon(DayGlyph.upload, size: 20),
-                        title: const Text('Сохранить копию задач'),
-                        onTap: busy
-                            ? null
-                            : () {
-                                DaySound.play(context, UiSound.tap);
-                                transfer(false);
-                              },
+                      // Inset so the hover fill does not start at the icon;
+                      // the surface lets the icon play its motion.
+                      FluidSurface(
+                        sound: null,
+                        child: ListTile(
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          leading: const DayIcon(DayGlyph.upload, size: 20),
+                          title: const Text('Сохранить копию задач'),
+                          onTap: busy
+                              ? null
+                              : () {
+                                  DaySound.play(context, UiSound.tap);
+                                  transfer(false);
+                                },
+                        ),
                       ),
-                      ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: const DayIcon(DayGlyph.download, size: 20),
-                        title: const Text('Импортировать копию'),
-                        onTap: busy
-                            ? null
-                            : () {
-                                DaySound.play(context, UiSound.tap);
-                                transfer(true);
-                              },
+                      // Inset so the hover fill does not start at the icon;
+                      // the surface lets the icon play its motion.
+                      FluidSurface(
+                        sound: null,
+                        child: ListTile(
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          leading: const DayIcon(DayGlyph.download, size: 20),
+                          title: const Text('Импортировать копию'),
+                          onTap: busy
+                              ? null
+                              : () {
+                                  DaySound.play(context, UiSound.tap);
+                                  transfer(true);
+                                },
+                        ),
                       ),
                     ]),
                     if (busy) const LinearProgressIndicator(),
@@ -213,7 +235,8 @@ class _SettingsPanelState extends State<SettingsPanel> {
                       ),
                     const SizedBox(height: 20),
                     Text(
-                      'Just · 0.2.0',
+                      // Release builds carry their version from CI.
+                      'Just · ${appVersion.isEmpty ? 'dev' : appVersion}',
                       style: Theme.of(context).textTheme.bodySmall!
                           .copyWith(color: colors.muted),
                     ),

@@ -88,17 +88,19 @@ class NativeNotificationPort implements NotificationPort {
   @override
   Future<ReminderPermission> currentPermission() async {
     if (!await _supported()) return ReminderPermission.unsupportedPackage;
+    // First, so the installer build is registered with Windows before asking.
+    await initialize();
     if (Platform.isWindows) {
       try {
         final setting = await const MethodChannel('day/platform')
             .invokeMethod<int>('notificationSetting');
-        if (setting == null || setting < 0) return ReminderPermission.unknown;
-        if (setting != 0) return ReminderPermission.denied;
+        // Without an answer the toast itself decides; only a clear «off»
+        // stops the reminder.
+        if (setting != null && setting > 0) return ReminderPermission.denied;
       } catch (_) {
-        return ReminderPermission.unknown;
+        /* Same: unknown is not a refusal. */
       }
     }
-    await initialize();
     if (Platform.isMacOS) {
       final options = await plugin
           .resolvePlatformSpecificImplementation<
@@ -187,6 +189,24 @@ class NativeNotificationPort implements NotificationPort {
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
       payload: task.id,
     );
+  }
+
+  /// Opens the system page where notifications for Just are switched on.
+  static Future<void> openSettings({bool exactAlarms = false}) async {
+    try {
+      if (Platform.isWindows) {
+        await Process.run('explorer', ['ms-settings:notifications']);
+      } else if (Platform.isMacOS) {
+        await Process.run('open', [
+          'x-apple.systempreferences:com.apple.Notifications-Settings.extension',
+        ]);
+      } else if (Platform.isAndroid) {
+        await const MethodChannel('day/platform')
+            .invokeMethod('openNotificationSettings', {'exact': exactAlarms});
+      }
+    } catch (_) {
+      /* Nothing to open; the dialog text still says where to look. */
+    }
   }
 
   @override

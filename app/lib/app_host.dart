@@ -287,9 +287,10 @@ class _DayHostState extends State<DayHost> with WidgetsBindingObserver {
         'Напоминания на этом устройстве недоступны.',
       ReminderPermission.needsExactAlarmPermission =>
         'Разрешите точные напоминания в настройках Android.',
-      ReminderPermission.unknown => 'Не удалось проверить доступность системных уведомлений. Проверьте настройки приложения в Windows.',
-      _ => 'Разрешите уведомления для приложения в настройках системы.',
+      ReminderPermission.unknown => 'Не удалось проверить, включены ли уведомления. Откройте настройки и разрешите их для Just.',
+      _ => 'Уведомления для Just выключены. Включите их в настройках системы.',
     };
+    final canOpen = permission != ReminderPermission.unsupportedPackage;
     final dialogContext = navigatorKey.currentContext;
     if (dialogContext == null || !dialogContext.mounted) return false;
     await showDialog<void>(
@@ -299,10 +300,22 @@ class _DayHostState extends State<DayHost> with WidgetsBindingObserver {
         content: Text(text),
         actions: [
           DayButton(
-            kind: DayButtonKind.primary,
+            kind: canOpen ? DayButtonKind.ghost : DayButtonKind.primary,
             onPressed: () => Navigator.pop(context),
-            label: const Text('Понятно'),
+            label: Text(canOpen ? 'Не сейчас' : 'Понятно'),
           ),
+          if (canOpen)
+            DayButton(
+              onPressed: () {
+                Navigator.pop(context);
+                NativeNotificationPort.openSettings(
+                  exactAlarms:
+                      permission ==
+                      ReminderPermission.needsExactAlarmPermission,
+                );
+              },
+              label: const Text('Открыть настройки'),
+            ),
         ],
       ),
     );
