@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
+import 'package:flutter/services.dart';
 
 /// Release builds get their version from CI (`--dart-define=JUST_VERSION`);
 /// local builds have none and never look for updates.
@@ -32,7 +33,8 @@ bool isNewer(String a, String b) {
 /// The latest public release when it is newer than this build, else null.
 /// Network problems are silent: the next check simply tries again.
 Future<AppUpdate?> checkForUpdate() async {
-  if (appVersion.isEmpty || !(Platform.isWindows || Platform.isMacOS)) {
+  if (appVersion.isEmpty ||
+      !(Platform.isWindows || Platform.isMacOS || Platform.isAndroid)) {
     return null;
   }
   try {
@@ -50,7 +52,8 @@ Future<AppUpdate?> checkForUpdate() async {
 
 /// Windows (installed copy): downloads the setup, checks it against
 /// SHA256SUMS.txt and runs it silently; it closes Just and starts the new
-/// version. Everywhere else the download opens in the browser.
+/// version. Everywhere else the download opens in the browser; on Android
+/// the APK then installs over the current app.
 /// Returns true when the installer took over and the app should quit.
 Future<bool> installUpdate(AppUpdate update) async {
   final setup = 'Just-Setup-${update.version}.exe';
@@ -77,6 +80,13 @@ Future<bool> installUpdate(AppUpdate update) async {
       '/NORESTART',
     ], mode: ProcessStartMode.detached);
     return true;
+  }
+  if (Platform.isAndroid) {
+    await const MethodChannel('day/platform').invokeMethod('openUrl', {
+      'url':
+          update.assets['Just-${update.version}-Android.apk'] ?? releasesPage,
+    });
+    return false;
   }
   final dmg = update.assets['Just-${update.version}.dmg'];
   final url = Platform.isMacOS && dmg != null ? dmg : releasesPage;

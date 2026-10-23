@@ -5,6 +5,8 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import android.media.AudioManager
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 
 class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -16,6 +18,10 @@ class MainActivity : FlutterActivity() {
                     result.success(audio.ringerMode == AudioManager.RINGER_MODE_NORMAL)
                 }
                 "hasPackageIdentity" -> result.success(true)
+                "openUrl" -> {
+                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(call.argument<String>("url"))))
+                    result.success(null)
+                }
                 else -> result.notImplemented()
             }
         }

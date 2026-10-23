@@ -22,7 +22,7 @@ r = d / 'docs/references/README.md'
 r.write_text(re.sub(r'\[(REF-\d+)\]\(REF-[^)]+\.jpg\)', r'\1', r.read_text())
   + '\n\nСами изображения референсов взяты из личной библиотеки и в публичный репозиторий не входят.\n')
 p = d / 'README.md'
-p.write_text(p.read_text().replace('# Just\n', '# Just\n\n**Скачать для Windows:** [последняя версия](https://github.com/me0wdes/just/releases/latest). Распакуйте архив целиком и запустите `day_planner.exe`.\n', 1))
+p.write_text(p.read_text().replace('# Just\n', '# Just\n\n**Скачать:** [последняя версия](https://github.com/me0wdes/just/releases/latest) для Windows, macOS и Android.\n', 1))
 EOF
 
 cd "$work/repo"

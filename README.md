@@ -1,6 +1,6 @@
 # Just
 
-**Скачать для Windows:** [последняя версия](https://github.com/me0wdes/just/releases/latest). Распакуйте архив целиком и запустите `day_planner.exe`.
+**Скачать:** [последняя версия](https://github.com/me0wdes/just/releases/latest) для Windows, macOS и Android.
 
 Личный повседневный планировщик для Windows и Android. Проект сохранён в `C:\AI FOLDER\Claude work\Just`. Android-сборка отложена пользователем, лицензия SDK не принята.
 
