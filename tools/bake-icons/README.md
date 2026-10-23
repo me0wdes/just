@@ -11,3 +11,6 @@ npm run bake
 ```
 
 Какая иконка ItsHover стоит за каким ключом приложения, задаёт `map.json`.
+
+Иконка приложения: экспортируйте фрейм «Icon» из Figma (node 78:2742) в 1024 px
+в `app/assets/brand/icon.png` и запустите `node app-icon.mjs`. Скрипт нарежет её для Windows (.ico), macOS и Android.

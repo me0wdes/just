@@ -96,20 +96,10 @@ class TaskController extends ChangeNotifier {
         listId: listId,
         today: today(),
         includeCompleted: true,
-        search: query.search,
       ),
     );
   }
 
-  void search(String text) => setQuery(
-    TaskQuery(
-      view: query.view,
-      listId: query.listId,
-      today: today(),
-      search: text,
-      includeCompleted: true,
-    ),
-  );
   Future<CommandReceipt> addTask(String title) => repository.execute(
     TaskCommand.createTask(
       id: const Uuid().v4(),

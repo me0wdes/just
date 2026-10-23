@@ -34,15 +34,26 @@ class NativeNotificationPort implements NotificationPort {
   final plugin = FlutterLocalNotificationsPlugin();
   final taps = StreamController<String>.broadcast();
   bool initialized = false;
+
+  /// Windows cancels a scheduled toast only for packaged (MSIX) apps. The
+  /// installer build has no package identity, so Just keeps the reminder
+  /// itself and shows the toast at the minute while it is running.
+  bool? _inApp;
+  final _timers = <int, Timer>{};
+
   Future<bool> _supported() async {
     if (!Platform.isWindows) return Platform.isAndroid || Platform.isMacOS;
-    try {
-      return await const MethodChannel('day/platform')
-              .invokeMethod<bool>('hasPackageIdentity') ??
-          false;
-    } catch (_) {
-      return false;
+    if (_inApp == null) {
+      try {
+        _inApp =
+            await const MethodChannel('day/platform')
+                .invokeMethod<bool>('hasPackageIdentity') !=
+            true;
+      } catch (_) {
+        _inApp = true;
+      }
     }
+    return true;
   }
 
   Future<void> initialize() async {
@@ -142,26 +153,54 @@ class NativeNotificationPort implements NotificationPort {
     return currentPermission();
   }
 
-  @override
-  Future<void> schedule(int id, TaskItem task) => plugin.zonedSchedule(
-    id: id,
-    title: task.title,
-    scheduledDate: tz.TZDateTime.from(task.reminderAtUtc!, tz.UTC),
-    notificationDetails: const NotificationDetails(
-      android: AndroidNotificationDetails(
-        'day-reminders',
-        'Напоминания',
-        channelDescription: 'Напоминания о ваших задачах',
-      ),
-      windows: WindowsNotificationDetails(),
-      macOS: DarwinNotificationDetails(),
+  static const _details = NotificationDetails(
+    android: AndroidNotificationDetails(
+      'day-reminders',
+      'Напоминания',
+      channelDescription: 'Напоминания о ваших задачах',
     ),
-    androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-    payload: task.id,
+    windows: WindowsNotificationDetails(),
+    macOS: DarwinNotificationDetails(),
   );
+
   @override
-  Future<void> cancel(int id) => plugin.cancel(id: id);
-  Future<void> close() => taps.close();
+  Future<void> schedule(int id, TaskItem task) async {
+    if (_inApp == true) {
+      _timers.remove(id)?.cancel();
+      final wait = task.reminderAtUtc!.difference(DateTime.now().toUtc());
+      _timers[id] = Timer(wait.isNegative ? Duration.zero : wait, () {
+        _timers.remove(id);
+        plugin.show(
+          id: id,
+          title: task.title,
+          notificationDetails: _details,
+          payload: task.id,
+        );
+      });
+      return;
+    }
+    await plugin.zonedSchedule(
+      id: id,
+      title: task.title,
+      scheduledDate: tz.TZDateTime.from(task.reminderAtUtc!, tz.UTC),
+      notificationDetails: _details,
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      payload: task.id,
+    );
+  }
+
+  @override
+  Future<void> cancel(int id) async {
+    _timers.remove(id)?.cancel();
+    if (_inApp != true) await plugin.cancel(id: id);
+  }
+
+  Future<void> close() {
+    for (final timer in _timers.values) {
+      timer.cancel();
+    }
+    return taps.close();
+  }
 }
 
 class ReminderService {
@@ -208,7 +247,13 @@ class ReminderService {
     ]);
     return max + 1;
   });
+  // Reminders Just keeps itself die with the process, so the first pass
+  // after launch sets every one again; re-scheduling a system one is harmless.
+  bool _primed = false;
+
   Future<ReminderReport> _reconcile(List<TaskItem> tasks) async {
+    final again = !_primed;
+    _primed = true;
     final scheduled = <String>[],
         cancelled = <String>[],
         failures = <String, String>{};
@@ -251,7 +296,7 @@ class ReminderService {
       if (permission != ReminderPermission.granted) {
         failures[task.id] = switch (permission) {
           ReminderPermission.unsupportedPackage =>
-            'Для напоминаний установите MSIX-версию приложения.',
+            'Напоминания на этом устройстве недоступны.',
           ReminderPermission.denied =>
             'Уведомления выключены в настройках системы.',
           ReminderPermission.needsExactAlarmPermission =>
@@ -260,7 +305,8 @@ class ReminderService {
         };
         continue;
       }
-      if (next[task.id] == fingerprint || failures.containsKey(task.id)) {
+      if ((!again && next[task.id] == fingerprint) ||
+          failures.containsKey(task.id)) {
         continue;
       }
       try {

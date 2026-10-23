@@ -58,7 +58,8 @@ class _ConnectionPanelState extends State<ConnectionPanel> {
       if (!mounted) return;
       final choice = await showDialog<ConnectionChoice>(
         context: context,
-        builder: (context) => AlertDialog(
+        builder: (context) => DayDialog(
+          width: 480,
           title: const Text('Подключить устройства'),
           content: SingleChildScrollView(
             child: Text(
@@ -66,18 +67,21 @@ class _ConnectionPanelState extends State<ConnectionPanel> {
             ),
           ),
           actions: [
-            FluidButton.text(
+            DayButton(
+              kind: DayButtonKind.ghost,
               onPressed: () => Navigator.pop(context),
-              child: const Text('Отмена'),
+              label: const Text('Отмена'),
             ),
-            FluidButton.text(
+            DayButton(
+              kind: DayButtonKind.secondary,
               onPressed: () =>
                   Navigator.pop(context, ConnectionChoice.openSeparate),
-              child: const Text('Открыть отдельно'),
+              label: const Text('Открыть отдельно'),
             ),
-            FluidButton(
+            DayButton(
+              kind: DayButtonKind.primary,
               onPressed: () => Navigator.pop(context, ConnectionChoice.merge),
-              child: const Text('Объединить'),
+              label: const Text('Объединить'),
             ),
           ],
         ),
@@ -125,19 +129,22 @@ class _ConnectionPanelState extends State<ConnectionPanel> {
     if (index == 0 && widget.connected) {
       final ok = await showDialog<bool>(
         context: context,
-        builder: (context) => AlertDialog(
+        builder: (context) => DayDialog(
           title: const Text('Хранить только на этом устройстве?'),
           content: const Text(
             'Синхронизация выключится. Задачи останутся здесь, на сервере они тоже сохранятся.',
           ),
           actions: [
-            FluidButton.text(
+            DayButton(
+              kind: DayButtonKind.ghost,
               onPressed: () => Navigator.pop(context, false),
-              child: const Text('Отмена'),
+              label: const Text('Отмена'),
             ),
-            FluidButton(
+            DayButton(
+              kind: DayButtonKind.ghost,
+              destructive: true,
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('Выключить'),
+              label: const Text('Выключить'),
             ),
           ],
         ),

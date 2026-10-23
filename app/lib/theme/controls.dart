@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -892,21 +894,35 @@ class DayIconGrid extends StatelessWidget {
   final ValueChanged<String> onPick;
   const DayIconGrid({super.key, required this.selected, required this.onPick});
   @override
-  Widget build(BuildContext context) => SizedBox(
-    width: 6 * controlHeight + 5 * 4,
-    child: Wrap(
-      spacing: 4,
-      runSpacing: 4,
-      children: [
-        for (final key in listIconKeys)
-          _IconCell(
-            key: ValueKey('list-icon-$key'),
-            glyph: listGlyph(key),
-            selected: key == selected,
-            onTap: () => onPick(key),
-          ),
-      ],
-    ),
+  // As many 36 px cells per row as fit (Figma «Новый список»: nine), the
+  // spare width shared between them; a popup with no width of its own
+  // gets six per row with 4 px gaps.
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, box) {
+      const compact = 6 * controlHeight + 5 * 4;
+      final width = box.hasBoundedWidth ? box.maxWidth : compact;
+      final perRow = math.max(1, ((width + 4) / (controlHeight + 4)).floor());
+      final gap = perRow == 1
+          ? 0.0
+          // A hair under the exact share, so rounding never wraps a cell.
+          : (width - perRow * controlHeight) / (perRow - 1) - .01;
+      return SizedBox(
+        width: width,
+        child: Wrap(
+          spacing: gap,
+          runSpacing: 4,
+          children: [
+            for (final key in listIconKeys)
+              _IconCell(
+                key: ValueKey('list-icon-$key'),
+                glyph: listGlyph(key),
+                selected: key == selected,
+                onTap: () => onPick(key),
+              ),
+          ],
+        ),
+      );
+    },
   );
 }
 
@@ -1064,6 +1080,80 @@ class _IconPickerRoute extends PopupRoute<String> {
         builder: (context, child) => Transform.translate(
           offset: Offset(0, -4 * (1 - t.value)),
           child: child,
+        ),
+      ),
+    );
+  }
+}
+
+/// Figma «Диалог»: a title, muted text and actions. The first action sits
+/// on the left and the rest on the right; a lone action goes right.
+class DayDialog extends StatelessWidget {
+  final Widget title;
+  final Widget? content;
+  final List<Widget> actions;
+  final double width;
+  const DayDialog({
+    super.key,
+    required this.title,
+    this.content,
+    this.actions = const [],
+    this.width = 400,
+  });
+  @override
+  Widget build(BuildContext context) {
+    final c = DayColors.of(context);
+    final text = Theme.of(context).textTheme;
+    return Dialog(
+      clipBehavior: Clip.antiAlias,
+      child: SizedBox(
+        width: width,
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              DefaultTextStyle(
+                style: text.titleMedium!.copyWith(
+                  fontSize: 17,
+                  height: 22 / 17,
+                  fontWeight: FontWeight.w600,
+                  color: c.text,
+                ),
+                child: title,
+              ),
+              if (content != null) ...[
+                const SizedBox(height: 12),
+                Flexible(
+                  child: DefaultTextStyle(
+                    style: text.bodyMedium!.copyWith(
+                      fontSize: 15,
+                      height: 21 / 15,
+                      color: c.muted,
+                    ),
+                    child: content!,
+                  ),
+                ),
+              ],
+              if (actions.isNotEmpty) ...[
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    if (actions.length > 1) actions.first,
+                    const Spacer(),
+                    for (final (i, a)
+                        in actions
+                            .skip(actions.length > 1 ? 1 : 0)
+                            .indexed) ...[
+                      if (i > 0) const SizedBox(width: 8),
+                      a,
+                    ],
+                  ],
+                ),
+              ],
+            ],
+          ),
         ),
       ),
     );

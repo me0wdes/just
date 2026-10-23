@@ -2,6 +2,8 @@ import 'dart:async';
 
 import '../../theme/controls.dart';
 import '../../theme/day_icon.dart';
+import '../../theme/fluid_surface.dart';
+import '../../theme/pickers.dart';
 
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
@@ -116,11 +118,9 @@ class _TaskDetailPanelState extends State<TaskDetailPanel> {
     super.dispose();
   }
 
-  Future<DateTime?> date() async => showDatePicker(
-    context: context,
-    initialDate: DateTime.tryParse(due ?? '') ?? DateTime.now(),
-    firstDate: DateTime(2020),
-    lastDate: DateTime(2100),
+  Future<DateTime?> date() async => showDayDatePicker(
+    context,
+    initial: DateTime.tryParse(due ?? '') ?? DateTime.now(),
   );
   // Autosave: pickers save at once, typing after a short pause, and
   // anything pending is flushed when the panel closes or switches task.
@@ -234,17 +234,16 @@ class _TaskDetailPanelState extends State<TaskDetailPanel> {
   Future<void> pickDue() async {
     final day = await date();
     if (day == null || !mounted) return;
-    final time = await showTimePicker(
-      context: context,
-      initialTime: dueTime == null
+    final time = await showDayTimePicker(
+      context,
+      initial: dueTime == null
           ? const TimeOfDay(hour: 9, minute: 0)
           : TimeOfDay(
               hour: int.parse(dueTime!.substring(0, 2)),
               minute: int.parse(dueTime!.substring(3)),
             ),
-      helpText: 'Время срока',
+      title: 'Время срока',
       cancelText: 'Только дата',
-      confirmText: 'Готово',
     );
     if (!mounted) return;
     final preset = reminderPreset();
@@ -284,9 +283,10 @@ class _TaskDetailPanelState extends State<TaskDetailPanel> {
     if (zone == null || !mounted) return;
     final day = await date();
     if (day == null || !mounted) return;
-    final time = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.now(),
+    final time = await showDayTimePicker(
+      context,
+      initial: TimeOfDay.now(),
+      title: 'Время напоминания',
     );
     if (time == null || !mounted) return;
     reminderZone = zone;
@@ -685,8 +685,12 @@ class _PropRowState extends State<_PropRow> {
             TweenAnimationBuilder<Color?>(
               tween: ColorTween(end: hovered ? c.text : c.icon),
               duration: fast,
-              builder: (context, color, _) =>
-                  DayIcon(widget.icon, size: 18, color: color),
+              // Hovering the row plays the icon's ItsHover motion.
+              builder: (context, color, _) => FluidInteraction(
+                hover: hovered ? 1 : 0,
+                press: 0,
+                child: DayIcon(widget.icon, size: 18, color: color),
+              ),
             ),
             const SizedBox(width: 10),
             SizedBox(

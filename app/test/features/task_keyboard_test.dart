@@ -9,7 +9,7 @@ import 'package:day_planner/platform/feedback_service.dart';
 import 'package:day_planner/domain/models.dart';
 
 void main() {
-  testWidgets('Ctrl F focuses search and Ctrl N focuses task entry', (
+  testWidgets('Ctrl N focuses task entry', (
     tester,
   ) async {
     final db = AppDatabase.memory(workspaceId: 'local');
@@ -22,17 +22,6 @@ void main() {
       MaterialApp(home: TaskHome(controller: controller)),
     );
     await tester.pumpAndSettle();
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-    await tester.sendKeyEvent(LogicalKeyboardKey.keyF);
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-    await tester.pump();
-    expect(
-      tester
-          .widget<TextField>(find.byKey(const Key('task-search-input')))
-          .focusNode!
-          .hasFocus,
-      true,
-    );
     await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
     await tester.sendKeyEvent(LogicalKeyboardKey.keyN);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);

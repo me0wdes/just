@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:day_planner/data/app_database.dart';
 import 'package:day_planner/data/task_repository.dart';
@@ -11,7 +10,7 @@ import 'package:day_planner/features/tasks/task_row.dart';
 import 'package:day_planner/platform/feedback_service.dart';
 
 void main() {
-  testWidgets('1000 real tasks build only visible rows and search notes', (
+  testWidgets('1000 real tasks build only visible rows', (
     tester,
   ) async {
     final db = AppDatabase.memory(workspaceId: 'local');
@@ -31,7 +30,6 @@ void main() {
                 'title': 'Дело $i',
                 'position': i * 1024,
                 'plannedForDate': '2026-10-19',
-                'note': i == 999 ? 'Найти по заметке' : '',
               },
             }),
         ],
@@ -47,17 +45,6 @@ void main() {
     await tester.pumpWidget(MaterialApp(home: TaskHome(controller: c)));
     await tester.pumpAndSettle();
     expect(find.byType(TaskRow).evaluate().length, lessThan(30));
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-    await tester.sendKeyEvent(LogicalKeyboardKey.keyF);
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-    await tester.pumpAndSettle();
-    await tester.enterText(
-      find.byKey(const Key('task-search-input')),
-      'Найти по заметке',
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('Дело 999'), findsOneWidget);
-    expect(find.text('Дело 0'), findsNothing);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
     c.dispose();

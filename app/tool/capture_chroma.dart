@@ -4,7 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:day_planner/features/tasks/greeting_header.dart';
+import 'package:day_planner/theme/app_theme.dart';
 import 'package:day_planner/theme/chroma_swap.dart';
 
 /// Renders the detail swap mid-sweep, to check the band by eye.
@@ -13,7 +13,10 @@ void main() {
     await tester.runAsync(ChromaSwap.load);
     tester.view.physicalSize = const Size(360, 600);
     tester.view.devicePixelRatio = 1;
-    final p = FlowPalette.forHour(14).stops;
+    const c = DayColors.dark;
+    final p = [
+      for (final k in const [.07, .12, .03]) Color.lerp(c.screen, c.text, k)!,
+    ];
     final id = ValueNotifier('A');
     final key = GlobalKey();
     await tester.pumpWidget(
@@ -25,10 +28,12 @@ void main() {
             valueListenable: id,
             builder: (_, value, _) => ChromaSwap(
               swapKey: value,
-              colors: [p[2], p[1], p[0]],
+              colors: p,
               child: ColoredBox(
-                color: Colors.white,
-                child: Center(child: Text(value)),
+                color: c.screen,
+                child: Center(
+                  child: Text(value, style: TextStyle(color: c.text)),
+                ),
               ),
             ),
           ),

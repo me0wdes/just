@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../data/backup_repository.dart';
 import '../../sync/protocol.dart';
+import '../../theme/controls.dart';
 
 class SyncConflicts extends StatefulWidget {
   final BackupRepository backups;
@@ -58,7 +59,8 @@ class _SyncConflictsState extends State<SyncConflicts> {
       'Сервер не принял это изменение. Исправьте запись или выберите версию.',
   };
   @override
-  Widget build(BuildContext context) => AlertDialog(
+  Widget build(BuildContext context) => DayDialog(
+    width: 520,
     title: const Text('Неотправленные изменения'),
     content: SizedBox(
       width: 480,
@@ -125,9 +127,10 @@ class _SyncConflictsState extends State<SyncConflicts> {
       ),
     ),
     actions: [
-      FluidButton.text(
+      DayButton(
+        kind: DayButtonKind.primary,
         onPressed: busy ? null : () => Navigator.pop(context),
-        child: const Text('Готово'),
+        label: const Text('Готово'),
       ),
     ],
   );

@@ -58,9 +58,8 @@ Future<bool> installUpdate(AppUpdate update) async {
   // unpacked from the zip has none and gets the release page instead.
   final installed =
       Platform.isWindows &&
-      File(
-        '${File(Platform.resolvedExecutable).parent.path}\\unins000.exe',
-      ).existsSync();
+      File('${File(Platform.resolvedExecutable).parent.path}\\unins000.exe')
+          .existsSync();
   if (installed && update.assets[setup] != null) {
     final bytes = await _get(update.assets[setup]!);
     final sums = utf8.decode(await _get(update.assets['SHA256SUMS.txt']!));

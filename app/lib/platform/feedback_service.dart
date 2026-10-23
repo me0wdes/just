@@ -57,30 +57,43 @@ class NativeSoundPolicy implements SoundPolicy {
   }
 }
 
-/// A few preloaded players per tone, so quick taps overlap instead of cutting off.
+/// A few players per tone, used in turn so quick taps overlap instead of
+/// cutting off. Every tone loads its source again before playing: on Windows
+/// a player that has played to the end stays silent when resumed, which lost
+/// every tap made after a pause and only let quick bursts through.
 class AssetCompletionAudio implements CompletionAudio {
-  final _pools = <String, Future<AudioPool>>{};
-  Future<AudioPool> _pool(String asset) => _pools[asset] ??= AudioPool.create(
-    source: AssetSource(asset),
-    maxPlayers: 3,
-  );
+  static const _voices = 3;
+  final _players = <String, List<AudioPlayer>>{};
+  final _next = <String, int>{};
 
-  /// Loads every tone up front; a pool created on the first tap starts late
-  /// enough that a quick tap sound is lost.
+  List<AudioPlayer> _for(String asset) => _players[asset] ??= [
+    for (var i = 0; i < _voices; i++)
+      AudioPlayer()..setReleaseMode(ReleaseMode.stop),
+  ];
+
+  /// Copies every tone into the audio cache up front, so the first tap
+  /// does not wait for it.
   void preload() {
-    for (final sound in UiSound.values) {
-      _pool(sound.asset).ignore();
-    }
+    AudioCache.instance.loadAll([
+      for (final s in UiSound.values) s.asset,
+    ]).ignore();
   }
 
   @override
   Future<void> play(String asset, double volume) async {
-    await (await _pool(asset)).start(volume: volume);
+    final players = _for(asset);
+    final i = _next[asset] ?? 0;
+    _next[asset] = (i + 1) % players.length;
+    final player = players[i];
+    await player.stop();
+    await player.play(AssetSource(asset), volume: volume);
   }
 
   Future<void> close() async {
-    for (final pool in _pools.values) {
-      await (await pool).dispose();
+    for (final players in _players.values) {
+      for (final player in players) {
+        await player.dispose();
+      }
     }
   }
 }

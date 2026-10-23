@@ -12,7 +12,6 @@ import '../../theme/chroma_swap.dart';
 import '../../theme/controls.dart';
 import '../../theme/day_icon.dart';
 import '../../theme/day_sound.dart';
-import '../../theme/fluid_button.dart';
 import '../../theme/fluid_surface.dart';
 import '../../theme/motion_tokens.dart';
 import '../../theme/segments.dart';
@@ -85,8 +84,7 @@ class _TaskHomeState extends State<TaskHome> {
           alignment: Alignment.topCenter,
           child: child,
         );
-  final composer = FocusNode(), search = FocusNode();
-  final searchText = TextEditingController();
+  final composer = FocusNode();
   final scaffold = GlobalKey<ScaffoldState>();
   final scroll = ScrollController();
   bool showCompleted = false;
@@ -109,7 +107,6 @@ class _TaskHomeState extends State<TaskHome> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final task = await c.repository.readTask(id);
       if (!mounted || task == null || task.deleted) return;
-      c.search('');
       c.navigate(TaskView.all);
       await open(task, MediaQuery.sizeOf(context).width >= 1280);
     });
@@ -119,8 +116,6 @@ class _TaskHomeState extends State<TaskHome> {
   void dispose() {
     c.removeListener(_openRequestedTask);
     composer.dispose();
-    search.dispose();
-    searchText.dispose();
     scroll.dispose();
     for (final timer in motionTimers) {
       timer.cancel();
@@ -230,6 +225,8 @@ class _TaskHomeState extends State<TaskHome> {
       ),
       builder: (context) => Dialog(
         insetPadding: const EdgeInsets.all(16),
+        // The panel paints its own square background; clip it to the corners.
+        clipBehavior: Clip.antiAlias,
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 440, maxHeight: 720),
           child: TaskDetailPanel(
@@ -249,7 +246,6 @@ class _TaskHomeState extends State<TaskHome> {
 
   Widget emptyState(bool completedTab) {
     final colors = DayColors.of(context);
-    final searching = c.query.search.isNotEmpty;
     return Center(
       child: SingleChildScrollView(
         child: Padding(
@@ -266,29 +262,19 @@ class _TaskHomeState extends State<TaskHome> {
                   border: Border.all(color: colors.border),
                 ),
                 child: DayIcon(
-                  searching
-                      ? DayGlyph.search
-                      : completedTab
-                      ? DayGlyph.check
-                      : DayGlyph.sun,
+                  completedTab ? DayGlyph.check : DayGlyph.sun,
                   size: 26,
                   color: colors.muted,
                 ),
               ),
               const SizedBox(height: 16),
               Text(
-                searching
-                    ? 'Ничего не нашлось'
-                    : completedTab
-                    ? 'Пока ничего не выполнено'
-                    : 'Здесь пока тихо',
+                completedTab ? 'Пока ничего не выполнено' : 'Здесь пока тихо',
                 style: Theme.of(context).textTheme.titleMedium,
               ),
               const SizedBox(height: 6),
               Text(
-                searching
-                    ? 'Попробуйте другое слово'
-                    : completedTab
+                completedTab
                     ? 'Отмеченные задачи появятся здесь'
                     : c.query.view == TaskView.today
                     ? 'Задачи со сроком на сегодня появятся здесь'
@@ -430,56 +416,6 @@ class _TaskHomeState extends State<TaskHome> {
     );
   }
 
-  Widget searchField() {
-    final colors = DayColors.of(context);
-    return TextField(
-      key: const Key('task-search-input'),
-      controller: searchText,
-      focusNode: search,
-      onChanged: (text) {
-        c.search(text);
-        setState(() {});
-      },
-      style: Theme.of(context).textTheme.bodyMedium,
-      decoration: InputDecoration(
-        hintText: 'Поиск',
-        isDense: true,
-        fillColor: colors.input,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
-        ),
-        prefixIcon: Padding(
-          padding: const EdgeInsets.only(left: 12, right: 6),
-          child: DayIcon(DayGlyph.search, size: 18, color: colors.muted),
-        ),
-        prefixIconConstraints: const BoxConstraints(minWidth: 36),
-        suffixIcon: IconButton(
-          tooltip: 'Закрыть поиск',
-          onPressed: closeSearch,
-          icon: DayIcon(DayGlyph.close, size: 16, color: colors.muted),
-        ),
-        contentPadding: const EdgeInsets.symmetric(vertical: 10),
-      ),
-    );
-  }
-
-  bool searching = false;
-  void openSearch() {
-    setState(() => searching = true);
-    WidgetsBinding.instance.addPostFrameCallback((_) => search.requestFocus());
-  }
-
-  void closeSearch() {
-    searchText.clear();
-    c.search('');
-    setState(() => searching = false);
-  }
-
   Widget reminderWarning() => OutlinedButton.icon(
     icon: DayIcon(
       DayGlyph.warning,
@@ -495,7 +431,8 @@ class _TaskHomeState extends State<TaskHome> {
       DaySound.play(context, UiSound.open);
       showDialog<void>(
         context: context,
-        builder: (context) => AlertDialog(
+        builder: (context) => DayDialog(
+          width: 460,
           title: const Text('Напоминания требуют внимания'),
           content: SizedBox(
             width: 420,
@@ -523,9 +460,10 @@ class _TaskHomeState extends State<TaskHome> {
             ),
           ),
           actions: [
-            FluidButton.text(
+            DayButton(
+              kind: DayButtonKind.primary,
               onPressed: () => Navigator.pop(context),
-              child: const Text('Понятно'),
+              label: const Text('Понятно'),
             ),
           ],
         ),
@@ -552,14 +490,6 @@ class _TaskHomeState extends State<TaskHome> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          reflow(
-            searching
-                ? Padding(
-                    padding: const EdgeInsets.only(bottom: 16),
-                    child: searchField(),
-                  )
-                : const SizedBox(width: double.infinity),
-          ),
           Row(
             children: [
               desktop
@@ -575,16 +505,6 @@ class _TaskHomeState extends State<TaskHome> {
                                 ),
                                 child: filters(),
                               ),
-                            ),
-                          ),
-                          DayButton.icon(
-                            tooltip: _mac ? 'Поиск · ⌘F' : 'Поиск · Ctrl+F',
-                            sound: UiSound.open,
-                            onPressed: searching ? closeSearch : openSearch,
-                            icon: DayIcon(
-                              searching ? DayGlyph.close : DayGlyph.search,
-                              size: 18,
-                              color: DayColors.of(context).text,
                             ),
                           ),
                         ],
@@ -756,12 +676,10 @@ class _TaskHomeState extends State<TaskHome> {
               onOpened: () => DaySound.play(context, UiSound.tap),
               icon: DayIcon(DayGlyph.more, size: 26, color: ink),
               onSelected: (action) => switch (action) {
-                'search' => openSearch(),
                 'settings' => widget.onSettings?.call(),
                 _ => widget.onSync?.call(),
               },
               itemBuilder: (_) => [
-                const PopupMenuItem(value: 'search', child: Text('Поиск')),
                 if (widget.onSettings != null)
                   const PopupMenuItem(
                     value: 'settings',
@@ -795,12 +713,9 @@ class _TaskHomeState extends State<TaskHome> {
           setState(() => showCompleted = false);
           composer.requestFocus();
         },
-        SingleActivator(LogicalKeyboardKey.keyF, control: !_mac, meta: _mac):
-            openSearch,
         const SingleActivator(LogicalKeyboardKey.escape): () {
           if (c.selectedId != null) DaySound.play(context, UiSound.close);
           c.select(null);
-          if (searching) closeSearch();
           FocusScope.of(context).unfocus();
         },
       },
@@ -902,10 +817,19 @@ class _TaskHomeState extends State<TaskHome> {
                                             width: 360,
                                             child: ChromaSwap(
                                               swapKey: selected.id,
+                                              // Quiet grey haze in the panel's own tone.
                                               colors: [
-                                                head.palette.stops[2],
-                                                head.palette.stops[1],
-                                                head.palette.stops[0],
+                                                for (final k in const [
+                                                  .07,
+                                                  .12,
+                                                  .03,
+                                                ])
+                                                  Color.lerp(
+                                                    DayColors.of(context)
+                                                        .screen,
+                                                    DayColors.of(context).text,
+                                                    k,
+                                                  )!,
                                               ],
                                               child: TaskDetailPanel(
                                                 key: ValueKey(selected.id),

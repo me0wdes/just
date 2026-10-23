@@ -47,7 +47,8 @@ class DaySegments extends StatelessWidget {
                 child: DecoratedBox(
                   decoration: BoxDecoration(
                     color: colors.pill,
-                    borderRadius: BorderRadius.circular(10),
+                    // Concentric corners: track radius minus its padding.
+                    borderRadius: BorderRadius.circular(12 - 4),
                     boxShadow: dark
                         ? null
                         : const [

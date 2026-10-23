@@ -158,13 +158,11 @@ class TaskQuery {
   final TaskView view;
   final String? listId;
   final LocalDate today;
-  final String search;
   final bool includeCompleted;
   const TaskQuery({
     required this.today,
     this.view = TaskView.today,
     this.listId,
-    this.search = '',
     this.includeCompleted = false,
   });
   bool matches(TaskItem task) {
@@ -181,9 +179,7 @@ class TaskQuery {
             task.plannedForDate == today)) {
       return false;
     }
-    final needle = search.trim().toLowerCase();
-    return needle.isEmpty ||
-        '${task.title}\n${task.note}'.toLowerCase().contains(needle);
+    return true;
   }
 }
 

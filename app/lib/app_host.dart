@@ -22,6 +22,7 @@ import 'sync/connection_service.dart';
 import 'sync/sync_engine.dart';
 import 'sync/sync_transport.dart';
 import 'theme/motion_tokens.dart';
+import 'theme/controls.dart';
 
 class DayHost extends StatefulWidget {
   final AppDatabase rootDatabase, taskDatabase;
@@ -281,7 +282,7 @@ class _DayHostState extends State<DayHost> with WidgetsBindingObserver {
     if (!mounted) return false;
     final text = switch (permission) {
       ReminderPermission.unsupportedPackage =>
-        'Для системных напоминаний установите MSIX-версию приложения.',
+        'Напоминания на этом устройстве недоступны.',
       ReminderPermission.needsExactAlarmPermission =>
         'Разрешите точные напоминания в настройках Android.',
       ReminderPermission.unknown => 'Не удалось проверить доступность системных уведомлений. Проверьте настройки приложения в Windows.',
@@ -291,13 +292,14 @@ class _DayHostState extends State<DayHost> with WidgetsBindingObserver {
     if (dialogContext == null || !dialogContext.mounted) return false;
     await showDialog<void>(
       context: dialogContext,
-      builder: (context) => AlertDialog(
+      builder: (context) => DayDialog(
         title: const Text('Напоминания'),
         content: Text(text),
         actions: [
-          TextButton(
+          DayButton(
+            kind: DayButtonKind.primary,
             onPressed: () => Navigator.pop(context),
-            child: const Text('Понятно'),
+            label: const Text('Понятно'),
           ),
         ],
       ),
@@ -314,7 +316,6 @@ class _DayHostState extends State<DayHost> with WidgetsBindingObserver {
           view: controller.query.view,
           listId: controller.query.listId,
           today: LocalDate.today(),
-          search: controller.query.search,
           includeCompleted: true,
         ),
       );
