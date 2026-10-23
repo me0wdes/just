@@ -53,7 +53,9 @@ class _DayHostState extends State<DayHost> with WidgetsBindingObserver {
   late ConnectionService connections;
   SyncEngine? engine;
   ConnectionSecret? secret;
-  final audio = AssetCompletionAudio()..preload();
+  late final audio = AssetCompletionAudio()
+    ..preload()
+    ..keepAwake(widget.settings.completionSoundEnabled);
   late final NotificationPort notifications;
   late ReminderService reminders;
   final navigatorKey = GlobalKey<NavigatorState>();
@@ -310,6 +312,13 @@ class _DayHostState extends State<DayHost> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     engine?.setForeground(state == AppLifecycleState.resumed);
+    // The silent keep-alive runs only while Just is on screen.
+    if (state == AppLifecycleState.resumed) {
+      audio.keepAwake(widget.settings.completionSoundEnabled);
+    } else if (state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.paused) {
+      audio.keepAwake(false);
+    }
     if (state == AppLifecycleState.resumed) {
       controller.setQuery(
         TaskQuery(

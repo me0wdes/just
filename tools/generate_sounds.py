@@ -61,3 +61,10 @@ for name, (duration, gain, voices) in sounds.items():
         wav.setparams((1, 2, RATE, 0, 'NONE', 'not compressed'))
         wav.writeframes(b''.join(frames))
     print(name, f'{duration * 1000:.0f} ms')
+
+# One second of digital silence, looped while Just is in front so the
+# audio output never falls asleep between taps (see AssetCompletionAudio).
+with wave.open(str(folder / 'silence.wav'), 'wb') as wav:
+    wav.setparams((1, 2, RATE, 0, 'NONE', 'not compressed'))
+    wav.writeframes(b'\0\0' * RATE)
+print('silence 1000 ms')

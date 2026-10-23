@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/services.dart';
 
@@ -58,9 +61,7 @@ class NativeSoundPolicy implements SoundPolicy {
 }
 
 /// A few players per tone, used in turn so quick taps overlap instead of
-/// cutting off. Every tone loads its source again before playing: on Windows
-/// a player that has played to the end stays silent when resumed, which lost
-/// every tap made after a pause and only let quick bursts through.
+/// cutting off; each one rewinds before it plays.
 class AssetCompletionAudio implements CompletionAudio {
   static const _voices = 3;
   final _players = <String, List<AudioPlayer>>{};
@@ -79,8 +80,31 @@ class AssetCompletionAudio implements CompletionAudio {
     ]).ignore();
   }
 
+  /// Bluetooth headsets, USB DACs and many laptop codecs power down a moment
+  /// after the last sound and swallow the start of the next one, which is
+  /// all of a 30 ms tap: slow clicks went silent while quick bursts played.
+  /// A looped silent clip keeps the output awake while Just is in front.
+  AudioPlayer? _awake;
+  Future<void> keepAwake(bool on) async {
+    if (!(Platform.isWindows || Platform.isMacOS)) return;
+    try {
+      if (on) {
+        final player = _awake ??= AudioPlayer()
+          ..setReleaseMode(ReleaseMode.loop);
+        if (player.state != PlayerState.playing) {
+          await player.play(AssetSource('sounds/silence.wav'));
+        }
+      } else {
+        await _awake?.pause();
+      }
+    } catch (_) {
+      /* Taps still play; only the wake-up guard is missing. */
+    }
+  }
+
   @override
   Future<void> play(String asset, double volume) async {
+    unawaited(keepAwake(true));
     final players = _for(asset);
     final i = _next[asset] ?? 0;
     _next[asset] = (i + 1) % players.length;
@@ -90,6 +114,7 @@ class AssetCompletionAudio implements CompletionAudio {
   }
 
   Future<void> close() async {
+    await _awake?.dispose();
     for (final players in _players.values) {
       for (final player in players) {
         await player.dispose();

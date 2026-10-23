@@ -24,6 +24,9 @@ WizardStyle=modern
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 CloseApplications=yes
+; Tells Explorer to drop its cached icons, so shortcuts show a new app icon
+; right after an update.
+ChangesAssociations=yes
 
 [Languages]
 Name: "ru"; MessagesFile: "compiler:Languages\Russian.isl"
