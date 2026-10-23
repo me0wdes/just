@@ -15,14 +15,26 @@ gh repo clone me0wdes/just "$work/repo" -- -q
 find "$work/repo" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
 git -C "$root" archive HEAD:Just | tar -x -C "$work/repo"
 rm -f "$work/repo"/docs/references/REF-*.jpg
-python3 - "$work/repo" <<'EOF'
+# Releases already out, newest first, for the download list in README.
+releases=$(gh release list -R me0wdes/just --limit 5 --json tagName -q '.[].tagName' | tr '\n' ' ')
+python3 - "$work/repo" "$tag" "$releases" <<'EOF'
 import pathlib, re, sys
-d = pathlib.Path(sys.argv[1])
+d, tag, out = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3].split()
 r = d / 'docs/references/README.md'
 r.write_text(re.sub(r'\[(REF-\d+)\]\(REF-[^)]+\.jpg\)', r'\1', r.read_text())
   + '\n\nСами изображения референсов взяты из личной библиотеки и в публичный репозиторий не входят.\n')
+# Current version with direct downloads, then the three before it.
+tags = ([tag] if tag else []) + [t for t in out if t != tag]
+base = 'https://github.com/me0wdes/just/releases'
+lines = []
+if tags:
+    v = tags[0].lstrip('v')
+    get = f'{base}/download/{tags[0]}'
+    lines.append(f'**Текущая версия {v}:** [Windows]({get}/Just-Setup-{v}.exe) · [macOS]({get}/Just-{v}.dmg) · [Android]({get}/Just-{v}-Android.apk)')
+    if tags[1:4]:
+        lines.append('\nПрошлые версии: ' + ' · '.join(f'[{t.lstrip("v")}]({base}/tag/{t})' for t in tags[1:4]) + f' · [все релизы]({base})')
 p = d / 'README.md'
-p.write_text(p.read_text().replace('# Just\n', '# Just\n\n**Скачать:** [последняя версия](https://github.com/me0wdes/just/releases/latest) для Windows, macOS и Android.\n', 1))
+p.write_text(re.sub(r'<!-- releases -->.*?<!-- /releases -->', '<!-- releases -->\n' + '\n'.join(lines) + '\n<!-- /releases -->', p.read_text(), flags=re.S))
 EOF
 
 cd "$work/repo"
