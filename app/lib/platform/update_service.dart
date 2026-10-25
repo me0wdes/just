@@ -50,51 +50,69 @@ Future<AppUpdate?> checkForUpdate() async {
   }
 }
 
-/// Windows (installed copy): downloads the setup, checks it against
-/// SHA256SUMS.txt and runs it silently; it closes Just and starts the new
-/// version. Everywhere else the download opens in the browser; on Android
-/// the APK then installs over the current app.
-/// Returns true when the installer took over and the app should quit.
-Future<bool> installUpdate(AppUpdate update) async {
+/// The installed Windows build replaces itself; Inno Setup leaves its
+/// uninstaller beside it, a copy unpacked from the zip has none.
+bool installsInPlace(AppUpdate update) =>
+    Platform.isWindows &&
+    update.assets['Just-Setup-${update.version}.exe'] != null &&
+    File('${File(Platform.resolvedExecutable).parent.path}\\unins000.exe')
+        .existsSync();
+
+class UpdateCancelled implements Exception {
+  const UpdateCancelled();
+}
+
+/// Downloads the setup with progress, checks it against SHA256SUMS.txt and
+/// starts it with no window of its own (/VERYSILENT): it closes Just,
+/// installs and opens the new version. The caller then quits.
+Future<void> installInPlace(
+  AppUpdate update, {
+  void Function(int received, int total)? onProgress,
+  bool Function()? cancelled,
+}) async {
   final setup = 'Just-Setup-${update.version}.exe';
-  // Inno Setup leaves its uninstaller beside an installed copy; a copy
-  // unpacked from the zip has none and gets the release page instead.
-  final installed =
-      Platform.isWindows &&
-      File('${File(Platform.resolvedExecutable).parent.path}\\unins000.exe')
-          .existsSync();
-  if (installed && update.assets[setup] != null) {
-    final bytes = await _get(update.assets[setup]!);
-    final sums = utf8.decode(await _get(update.assets['SHA256SUMS.txt']!));
-    final expected = RegExp('([0-9a-f]{64})\\s+\\*?${RegExp.escape(setup)}')
-        .firstMatch(sums)
-        ?.group(1);
-    if (expected == null || sha256.convert(bytes).toString() != expected) {
-      throw const FormatException('Обновление повреждено');
-    }
-    final file = File('${Directory.systemTemp.path}\\$setup');
-    await file.writeAsBytes(bytes);
-    await Process.start(file.path, [
-      '/SILENT',
-      '/SUPPRESSMSGBOXES',
-      '/NORESTART',
-    ], mode: ProcessStartMode.detached);
-    return true;
+  final bytes = await _get(
+    update.assets[setup]!,
+    onProgress: onProgress,
+    cancelled: cancelled,
+  );
+  final sums = utf8.decode(await _get(update.assets['SHA256SUMS.txt']!));
+  final expected = RegExp('([0-9a-f]{64})\\s+\\*?${RegExp.escape(setup)}')
+      .firstMatch(sums)
+      ?.group(1);
+  if (expected == null || sha256.convert(bytes).toString() != expected) {
+    throw const FormatException('Обновление повреждено');
   }
+  if (cancelled?.call() == true) throw const UpdateCancelled();
+  final file = File('${Directory.systemTemp.path}\\$setup');
+  await file.writeAsBytes(bytes);
+  await Process.start(file.path, [
+    '/VERYSILENT',
+    '/SUPPRESSMSGBOXES',
+    '/NORESTART',
+  ], mode: ProcessStartMode.detached);
+}
+
+/// Elsewhere the download opens in the browser; on Android the APK then
+/// installs over the current app.
+Future<void> openDownload(AppUpdate update) async {
   if (Platform.isAndroid) {
     await const MethodChannel('day/platform').invokeMethod('openUrl', {
       'url':
           update.assets['Just-${update.version}-Android.apk'] ?? releasesPage,
     });
-    return false;
+    return;
   }
   final dmg = update.assets['Just-${update.version}.dmg'];
   final url = Platform.isMacOS && dmg != null ? dmg : releasesPage;
   await Process.run(Platform.isMacOS ? 'open' : 'explorer', [url]);
-  return false;
 }
 
-Future<List<int>> _get(String url) async {
+Future<List<int>> _get(
+  String url, {
+  void Function(int received, int total)? onProgress,
+  bool Function()? cancelled,
+}) async {
   final client = HttpClient()..userAgent = 'Just/$appVersion';
   try {
     final response = await (await client.getUrl(Uri.parse(url))).close();
@@ -102,9 +120,13 @@ Future<List<int>> _get(String url) async {
       throw HttpException('HTTP ${response.statusCode}', uri: Uri.parse(url));
     }
     final bytes = BytesBuilder(copy: false);
-    await response.forEach(bytes.add);
+    await for (final chunk in response) {
+      if (cancelled?.call() == true) throw const UpdateCancelled();
+      bytes.add(chunk);
+      onProgress?.call(bytes.length, response.contentLength);
+    }
     return bytes.takeBytes();
   } finally {
-    client.close();
+    client.close(force: true);
   }
 }

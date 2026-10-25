@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -92,13 +94,7 @@ class _ConnectionPanelState extends State<ConnectionPanel> {
       await widget.onConnected(result);
     } catch (e) {
       if (mounted) {
-        setState(
-          () => error = e is FormatException
-              ? e.message
-              : e is SyncHttpException && e.status == 401
-              ? 'Ключ не подошёл'
-              : 'Не удалось подключиться. Проверьте адрес, сертификат и доступность сервера.',
-        );
+        setState(() => error = connectionError(e, endpoint.text.trim()));
       }
     } finally {
       if (mounted) setState(() => busy = false);
@@ -155,6 +151,20 @@ class _ConnectionPanelState extends State<ConnectionPanel> {
     if (mounted) setState(() => serverMode = index == 1);
   }
 
+  /// Step 4: the string the installer printed, straight from the clipboard.
+  Future<void> pasteAndConnect() async {
+    final text = (await Clipboard.getData(Clipboard.kTextPlain))?.text?.trim();
+    if (!mounted) return;
+    if (text == null || !text.startsWith('just1:')) {
+      setState(
+        () => error = 'В буфере обмена нет строки подключения. Скопируйте строку, которая начинается с just1:, и нажмите ещё раз.',
+      );
+      return;
+    }
+    link.text = text;
+    await connectFromLink();
+  }
+
   Future<void> connectFromLink() async {
     final parsed = parseConnectionString(link.text);
     if (parsed == null) {
@@ -207,64 +217,90 @@ class _ConnectionPanelState extends State<ConnectionPanel> {
             ],
           ),
         ] else ...[
+          // Figma «Хранение данных · Сервер»: four steps a non-admin can follow.
           Text(
-            'Поставьте сервер одной командой на своём Linux-сервере. В конце он покажет строку подключения, вставьте её сюда.',
+            'Задачи синхронизируются между устройствами через ваш собственный сервер. Понадобится сервер с Linux: его можно арендовать у любого хостинга.',
             style: small,
           ),
-          const SizedBox(height: 8),
-          _CommandBox(command: installCommand),
-          const SizedBox(height: 12),
-          if (!manual)
-            TextField(
-              key: const Key('sync-link'),
-              controller: link,
-              enabled: !busy,
-              enableSuggestions: false,
-              autocorrect: false,
-              onSubmitted: (_) => connectFromLink(),
-              decoration: const InputDecoration(hintText: 'just1:…'),
-            )
-          else ...[
-            TextField(
-              key: const Key('sync-endpoint'),
-              controller: endpoint,
-              enabled: !busy,
-              keyboardType: TextInputType.url,
-              decoration: const InputDecoration(hintText: 'https://…/sync'),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              key: const Key('sync-secret'),
-              controller: key,
-              enabled: !busy,
-              obscureText: true,
-              enableSuggestions: false,
-              autocorrect: false,
-              decoration: const InputDecoration(hintText: 'Ключ подключения'),
-            ),
-          ],
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              FluidButton(
-                onPressed: busy ? null : (manual ? connect : connectFromLink),
-                child: Text(busy ? 'Проверяем…' : 'Подключить'),
-              ),
-              const SizedBox(width: 8),
-              Flexible(
-                child: FluidButton.text(
-                  onPressed: busy
-                      ? null
-                      : () => setState(() {
-                          manual = !manual;
-                          error = null;
-                        }),
-                  child: Text(
-                    manual ? 'Вставить строку' : 'Ввести адрес и ключ',
+          const SizedBox(height: 14),
+          const _Step(
+            number: 1,
+            title: 'Зайдите на сервер',
+            text: 'Откройте терминал (на Windows это PowerShell) и введите команду ниже, подставив адрес сервера. Адрес и пароль пришлёт хостинг после покупки.',
+            child: _CommandBox(command: 'ssh root@адрес-сервера'),
+          ),
+          const _Step(
+            number: 2,
+            title: 'Установите Just на сервер',
+            text: 'Вставьте эту команду в окно сервера правой кнопкой мыши и нажмите Enter. Установка займёт пару минут.',
+            child: _CommandBox(command: installCommand),
+          ),
+          const _Step(
+            number: 3,
+            title: 'Скопируйте строку подключения',
+            text: 'В конце установки появится строка, которая начинается с just1:. Выделите её целиком и скопируйте.',
+          ),
+          _Step(
+            number: 4,
+            title: 'Вставьте её в Just',
+            text: manual
+                ? 'Адрес и ключ тоже выводит установщик.'
+                : 'Just возьмёт строку из буфера обмена и сразу подключится.',
+            child: manual
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      TextField(
+                        key: const Key('sync-endpoint'),
+                        controller: endpoint,
+                        enabled: !busy,
+                        keyboardType: TextInputType.url,
+                        decoration: const InputDecoration(
+                          hintText: 'https://…/sync',
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        key: const Key('sync-secret'),
+                        controller: key,
+                        enabled: !busy,
+                        obscureText: true,
+                        enableSuggestions: false,
+                        autocorrect: false,
+                        decoration: const InputDecoration(
+                          hintText: 'Ключ подключения',
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      DayButton(
+                        onPressed: busy ? null : connect,
+                        label: Text(busy ? 'Проверяем…' : 'Подключить'),
+                      ),
+                    ],
+                  )
+                : Align(
+                    alignment: Alignment.centerLeft,
+                    child: DayButton(
+                      onPressed: busy ? null : pasteAndConnect,
+                      label: Text(
+                        busy ? 'Проверяем…' : 'Вставить и подключить',
+                      ),
+                    ),
                   ),
-                ),
-              ),
-            ],
+          ),
+          DayButton(
+            kind: DayButtonKind.ghost,
+            onPressed: busy
+                ? null
+                : () => setState(() {
+                    manual = !manual;
+                    error = null;
+                  }),
+            label: Text(
+              manual
+                  ? 'Вставить строку из буфера'
+                  : 'Ввести адрес и ключ вручную',
+            ),
           ),
         ],
         if (error != null)
@@ -306,7 +342,7 @@ class _CommandBox extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = DayColors.of(context);
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+      padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
       decoration: BoxDecoration(
         color: c.input,
         borderRadius: BorderRadius.circular(10),
@@ -324,8 +360,8 @@ class _CommandBox extends StatelessWidget {
               ),
             ),
           ),
-          DayButton.icon(
-            tooltip: 'Скопировать',
+          DayButton(
+            kind: DayButtonKind.secondary,
             onPressed: () {
               Clipboard.setData(ClipboardData(text: command));
               ScaffoldMessenger.maybeOf(context)?.showSnackBar(
@@ -336,7 +372,94 @@ class _CommandBox extends StatelessWidget {
                 ),
               );
             },
-            icon: DayIcon(DayGlyph.upload, size: 16, color: c.muted),
+            icon: DayIcon(DayGlyph.copy, size: 16, color: c.text),
+            label: const Text('Скопировать'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// What went wrong, in words a person can act on.
+String connectionError(Object e, String address) {
+  final host = Uri.tryParse(address)?.host ?? address;
+  return switch (e) {
+    FormatException(:final message) => message,
+    SyncHttpException(status: 401) =>
+      'Ключ не подошёл. Скопируйте строку подключения ещё раз целиком.',
+    SyncHttpException(:final status) => 'Сервер ответил ошибкой $status.',
+    HandshakeException() || TlsException() =>
+      'Сервер $host нашёлся, но его сертификат не принят. Проверьте, что HTTPS настроен.',
+    SocketException(:final message, :final osError)
+        when '$message ${osError?.message}'.contains('lookup') =>
+      'Не удаётся найти сервер $host. Проверьте интернет или адрес.',
+    SocketException() || TimeoutException() =>
+      'Сервер $host не отвечает. Проверьте, что он включён и порт 443 открыт.',
+    _ => 'Не удалось подключиться: $e',
+  };
+}
+
+/// A numbered step: the number in a circle, a title, a line of help and an
+/// optional control under it.
+class _Step extends StatelessWidget {
+  final int number;
+  final String title, text;
+  final Widget? child;
+  const _Step({
+    required this.number,
+    required this.title,
+    required this.text,
+    this.child,
+  });
+  @override
+  Widget build(BuildContext context) {
+    final c = DayColors.of(context);
+    final body = Theme.of(context).textTheme.bodyMedium!;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 24,
+            height: 24,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(color: c.track, shape: BoxShape.circle),
+            child: Text(
+              '$number',
+              style: body.copyWith(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: c.text,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: body.copyWith(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                    color: c.text,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  text,
+                  style: body.copyWith(
+                    fontSize: 13,
+                    height: 18 / 13,
+                    color: c.muted,
+                  ),
+                ),
+                if (child != null) ...[const SizedBox(height: 8), child!],
+              ],
+            ),
           ),
         ],
       ),

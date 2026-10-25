@@ -131,19 +131,67 @@ if [[ -z $domain ]]; then
   domain="${ip//./-}.sslip.io"
 fi
 sed -i '/^JUST_DOMAIN=/d' "$ENV_FILE" && echo "JUST_DOMAIN=$domain" >> "$ENV_FILE"
-if ! command -v caddy >/dev/null; then
-  curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-  curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' > /etc/apt/sources.list.d/caddy-stable.list
-  apt-get update -qq && apt-get install -y -qq caddy >/dev/null
-fi
-cat > /etc/caddy/just-sync.caddy <<EOF
+# Whoever already answers on 80/443 keeps them: Just joins nginx or Apache
+# as one more site with its own certificate, and brings Caddy only to an
+# empty server.
+web=$(ss -ltnpH '( sport = :80 or sport = :443 )' 2>/dev/null | grep -oE '"(nginx|apache2|httpd|caddy)"' | head -1 | tr -d '"' || true)
+[[ -z $web ]] && ss -ltnH '( sport = :80 or sport = :443 )' 2>/dev/null | grep -q . && web=other
+certbot_for() {
+  command -v certbot >/dev/null || apt-get install -y -qq certbot "python3-certbot-$1" >/dev/null
+  certbot --"$1" -d "$domain" --non-interactive --agree-tos --register-unsafely-without-email --redirect --keep-until-expiring >/dev/null
+}
+case $web in
+  nginx)
+    echo "На сервере уже работает nginx, добавляю Just к нему отдельным сайтом."
+    cat > /etc/nginx/conf.d/just-sync.conf <<EOF
+server {
+  listen 80;
+  server_name $domain;
+  client_max_body_size 10m;
+  location / {
+    proxy_pass http://127.0.0.1:$PORT;
+    proxy_set_header Host \$host;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto \$scheme;
+  }
+}
+EOF
+    nginx -t >/dev/null 2>&1 || { echo "nginx не принял настройку. Пришлите вывод: sudo nginx -t"; exit 1; }
+    systemctl reload nginx
+    certbot_for nginx ;;
+  apache2|httpd)
+    echo "На сервере уже работает Apache, добавляю Just к нему отдельным сайтом."
+    a2enmod -q proxy proxy_http headers >/dev/null
+    cat > /etc/apache2/sites-available/just-sync.conf <<EOF
+<VirtualHost *:80>
+  ServerName $domain
+  ProxyPreserveHost On
+  ProxyPass / http://127.0.0.1:$PORT/
+  ProxyPassReverse / http://127.0.0.1:$PORT/
+</VirtualHost>
+EOF
+    a2ensite -q just-sync >/dev/null && systemctl reload apache2
+    certbot_for apache ;;
+  other)
+    echo "Порты 80 и 443 заняты программой, которую установщик не знает:"
+    ss -ltnp '( sport = :80 or sport = :443 )' | tail -n +2
+    echo "Освободите их или запустите установку с JUST_DOMAIN на сервере без сайтов."
+    exit 1 ;;
+  *)
+    if ! command -v caddy >/dev/null; then
+      curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+      curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' > /etc/apt/sources.list.d/caddy-stable.list
+      apt-get update -qq && apt-get install -y -qq caddy >/dev/null
+    fi
+    cat > /etc/caddy/just-sync.caddy <<EOF
 $domain {
   reverse_proxy 127.0.0.1:$PORT
 }
 EOF
-# Keep an existing Caddy setup; only add our site to it.
-grep -q 'import just-sync.caddy' /etc/caddy/Caddyfile 2>/dev/null || echo 'import just-sync.caddy' >> /etc/caddy/Caddyfile
-systemctl reload caddy 2>/dev/null || systemctl restart caddy
+    # Keep an existing Caddy setup; only add our site to it.
+    grep -q 'import just-sync.caddy' /etc/caddy/Caddyfile 2>/dev/null || echo 'import just-sync.caddy' >> /etc/caddy/Caddyfile
+    systemctl reload caddy 2>/dev/null || systemctl restart caddy ;;
+esac
 if command -v ufw >/dev/null && ufw status | grep -q 'Status: active'; then
   ufw allow 80/tcp >/dev/null && ufw allow 443/tcp >/dev/null
 fi

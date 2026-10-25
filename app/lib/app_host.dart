@@ -17,6 +17,7 @@ import 'features/tasks/task_controller.dart';
 import 'platform/feedback_service.dart';
 import 'platform/reminder_service.dart';
 import 'platform/secure_connection_store.dart';
+import 'platform/update_dialog.dart';
 import 'platform/update_service.dart';
 import 'sync/connection_service.dart';
 import 'sync/sync_engine.dart';
@@ -99,23 +100,24 @@ class _DayHostState extends State<DayHost> with WidgetsBindingObserver {
         action: SnackBarAction(
           label: 'Обновить',
           onPressed: () async {
-            messenger.showSnackBar(
-              const SnackBar(
-                persist: false,
-                duration: MotionTokens.toast,
-                content: Text('Загружаю обновление…'),
-              ),
-            );
+            final dialogContext = navigatorKey.currentContext;
+            // The installed Windows build shows its own progress window.
+            if (installsInPlace(update) &&
+                dialogContext != null &&
+                dialogContext.mounted) {
+              _offeredUpdate = null;
+              await showUpdateDialog(dialogContext, update);
+              return;
+            }
             try {
-              // The installer closes Just and opens the new version.
-              if (await installUpdate(update)) exit(0);
+              await openDownload(update);
             } catch (_) {
               _offeredUpdate = null;
               messenger.showSnackBar(
                 const SnackBar(
                   persist: false,
                   duration: MotionTokens.toast,
-                  content: Text('Не удалось обновить, попробуем позже'),
+                  content: Text('Не удалось открыть загрузку'),
                 ),
               );
             }

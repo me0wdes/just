@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 import 'protocol.dart';
+import 'trusted_roots.dart';
 
 abstract interface class SyncTransport {
   Future<SyncResponse> exchange(SyncRequest request);
@@ -43,13 +44,16 @@ class HttpSyncTransport implements SyncTransport {
       throw const FormatException('Нужен HTTPS адрес без ключа в ссылке');
     }
   }
+  static final _context = SecurityContext(withTrustedRoots: true)
+    ..setTrustedCertificatesBytes(utf8.encode(letsEncryptRoots));
+
   @override
   Future<SyncResponse> exchange(SyncRequest request) async {
     final bytes = utf8.encode(jsonEncode(request.toJson()));
     if (bytes.length > 262144) {
       throw const FormatException('Слишком большой пакет изменений');
     }
-    final client = HttpClient()
+    final client = HttpClient(context: _context)
       ..connectionTimeout = const Duration(seconds: 10);
     Future<SyncResponse> run() async {
       final token = await tokenProvider();
