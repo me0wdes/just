@@ -21,6 +21,7 @@ import 'task_controller.dart';
 import 'task_detail_panel.dart';
 import 'task_row.dart';
 import 'week_header.dart';
+import '../../theme/toast.dart';
 
 final _mac = defaultTargetPlatform == TargetPlatform.macOS;
 
@@ -63,6 +64,13 @@ class _TaskHomeState extends State<TaskHome> {
   final known = <String>{};
   bool primed = false;
   final motionTimers = <Timer>[];
+
+  /// Where a touch began on a card and how far it has moved, to tell a long
+  /// press (menu) from a drag (reorder).
+  Offset? pressAt;
+  double pressMoved = 0;
+  void Function(Offset)? pressMenu;
+  bool desktopLayout = true;
   TaskController get c => widget.controller;
   @override
   void initState() {
@@ -122,24 +130,17 @@ class _TaskHomeState extends State<TaskHome> {
             }),
           );
         }
-        ScaffoldMessenger.of(context)
-          ..hideCurrentSnackBar()
-          ..showSnackBar(
-            SnackBar(
-              persist: false,
-              duration: MotionTokens.toast,
-              content: Text('«${task.title}» выполнена'),
-              action: SnackBarAction(
-                label: 'Вернуть',
-                onPressed: () async {
-                  final saved = await c.repository.readTask(task.id);
-                  if (saved?.completionId != null) {
-                    await c.undoCompletion(task.id, saved!.completionId!);
-                  }
-                },
-              ),
-            ),
-          );
+        DayToast.show(
+          context,
+          '«${task.title}» выполнена',
+          action: 'Вернуть',
+          onAction: () async {
+            final saved = await c.repository.readTask(task.id);
+            if (saved?.completionId != null) {
+              await c.undoCompletion(task.id, saved!.completionId!);
+            }
+          },
+        );
       }
     } catch (_) {
       if (mounted) {
@@ -148,35 +149,22 @@ class _TaskHomeState extends State<TaskHome> {
           collapsing.remove(task.id);
         });
         DaySound.play(context, UiSound.error);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            persist: false,
-            duration: MotionTokens.toast,
-            content: Text('Не удалось изменить задачу'),
-          ),
-        );
+        DayToast.show(context, 'Не удалось изменить задачу');
       }
     }
   }
 
   Future<void> remove(TaskItem task) async {
-    final messenger = ScaffoldMessenger.of(context);
     DaySound.play(context, UiSound.delete);
     if (c.selectedId == task.id) c.select(null);
     await c.deleteTask(task.id);
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          persist: false,
-          duration: MotionTokens.toast,
-          content: const Text('Задача удалена'),
-          action: SnackBarAction(
-            label: 'Отменить',
-            onPressed: () => c.restoreTask(task.id),
-          ),
-        ),
-      );
+    if (!mounted) return;
+    DayToast.show(
+      context,
+      'Задача удалена',
+      action: 'Отменить',
+      onAction: () => c.restoreTask(task.id),
+    );
   }
 
   Future<void> open(TaskItem task, bool inline) async {
@@ -316,7 +304,18 @@ class _TaskHomeState extends State<TaskHome> {
         },
       ),
       onReorderStart: (_) => DaySound.play(context, UiSound.tap),
+      // Touch: a long press that never moved opens the card's menu, the way
+      // a right click does on a computer; a moved one reorders.
+      onReorderEnd: (_) {
+        final at = pressAt, menu = pressMenu;
+        if (!desktopLayout && at != null && menu != null && pressMoved < 12) {
+          HapticFeedback.selectionClick();
+          menu(at);
+        }
+        pressAt = null;
+      },
       onReorderItem: (oldIndex, newIndex) {
+        if (!desktopLayout && pressMoved < 12) return;
         if (showCompleted || oldIndex >= active.length) return;
         DaySound.play(context, UiSound.nav);
         final copy = List<TaskItem>.of(active), item = active[oldIndex];
@@ -339,6 +338,8 @@ class _TaskHomeState extends State<TaskHome> {
           today: c.query.today,
           onToggle: () => toggle(task),
           onOpen: () => open(task, inline),
+          // A finished card cannot be dragged, so its long press is free.
+          longPressMenu: !desktop && task.completed,
           onMenu: (at) => showDayMenu(context, at, [
             DayMenuItem('Открыть', DayGlyph.note, () => open(task, inline)),
             DayMenuItem(
@@ -372,10 +373,23 @@ class _TaskHomeState extends State<TaskHome> {
                               enabled: !task.completed,
                               child: row,
                             )
-                          : ReorderableDelayedDragStartListener(
-                              index: index,
-                              enabled: !task.completed,
-                              child: row,
+                          : Listener(
+                              onPointerDown: (e) {
+                                pressAt = e.position;
+                                pressMoved = 0;
+                                pressMenu = row.onMenu;
+                              },
+                              onPointerMove: (e) {
+                                final start = pressAt;
+                                if (start == null) return;
+                                final d = (e.position - start).distance;
+                                if (d > pressMoved) pressMoved = d;
+                              },
+                              child: ReorderableDelayedDragStartListener(
+                                index: index,
+                                enabled: !task.completed,
+                                child: row,
+                              ),
                             ),
                     ),
                   ),
@@ -582,7 +596,6 @@ class _TaskHomeState extends State<TaskHome> {
   /// The phone header's top row: lists on the left, more on the right.
   Widget phoneBar({bool onField = false}) {
     final colors = DayColors.of(context);
-    final ink = onField ? const Color(0xff141414) : colors.text;
     // 48px touch targets; the icons are shifted out so they still line up
     // with the title card edge.
     // Figma «Шапка»: only the lists button; settings and sync live in the
@@ -592,10 +605,11 @@ class _TaskHomeState extends State<TaskHome> {
       child: Row(
         children: [
           Transform.translate(
-            offset: const Offset(-11, 0),
+            offset: const Offset(-2, 0),
             child: FluidSurface(
               sound: UiSound.open,
               pressScale: .9,
+              // Figma «menu icon»: a 44 px circle in the screen colour.
               child: Tooltip(
                 message: 'Списки',
                 child: InkResponse(
@@ -604,7 +618,20 @@ class _TaskHomeState extends State<TaskHome> {
                   child: SizedBox.square(
                     dimension: 48,
                     child: Center(
-                      child: DayIcon(DayGlyph.hamburger, size: 26, color: ink),
+                      child: Container(
+                        width: 44,
+                        height: 44,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: colors.screen,
+                          shape: BoxShape.circle,
+                        ),
+                        child: DayIcon(
+                          DayGlyph.hamburger,
+                          size: 20,
+                          color: colors.text,
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -642,6 +669,7 @@ class _TaskHomeState extends State<TaskHome> {
           builder: (context, constraints) {
             final desktop = constraints.maxWidth >= 900,
                 inline = constraints.maxWidth >= 1280;
+            desktopLayout = desktop;
             final selected = inline ? c.selected : null;
             final colors = DayColors.of(context);
             final head = WeekHeader(

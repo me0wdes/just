@@ -17,9 +17,16 @@ usage() { sed -n '5,8p' "$0" | sed 's/^#   //'; exit 1; }
 [[ $EUID -eq 0 || ${1:-} == backup ]] || { echo "Запустите через sudo."; exit 1; }
 
 connection() {
-  local domain conn
-  domain=$(sed -n 's/^JUST_DOMAIN=//p' "$ENV_FILE")
-  conn="just1:$(printf '{"u":"https://%s/sync","k":"%s"}' "$domain" "$1" | base64 -w0 | tr '+/' '-_' | tr -d '=')"
+  local url pin conn
+  # Direct mode: the IP address and the certificate fingerprint the app pins.
+  url=$(sed -n 's/^JUST_ENDPOINT=//p' "$ENV_FILE")
+  pin=$(sed -n 's/^JUST_PIN=//p' "$ENV_FILE")
+  [[ -n $url ]] || url="https://$(sed -n 's/^JUST_DOMAIN=//p' "$ENV_FILE")/sync"
+  if [[ -n $pin ]]; then
+    conn="just1:$(printf '{"u":"%s","k":"%s","p":"%s"}' "$url" "$1" "$pin" | base64 -w0 | tr '+/' '-_' | tr -d '=')"
+  else
+    conn="just1:$(printf '{"u":"%s","k":"%s"}' "$url" "$1" | base64 -w0 | tr '+/' '-_' | tr -d '=')"
+  fi
   echo
   echo "$conn"
   echo

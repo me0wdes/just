@@ -105,4 +105,79 @@ void main() {
     c.dispose();
     await db.close();
   });
+
+  testWidgets('picking a day in «Все задачи» filters without leaving it', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final db = AppDatabase.memory(workspaceId: 'local');
+    final repo = SqliteTaskRepository(db);
+    for (final (title, due) in [
+      ('Сегодня дело', '2026-10-19'),
+      ('Завтра дело', '2026-10-20'),
+    ]) {
+      await repo.execute(
+        TaskCommand.createTask(
+          id: const Uuid().v4(),
+          title: title,
+          listId: inboxId,
+          fields: {'dueDate': due},
+        ),
+      );
+    }
+    final c = TaskController(
+      repo,
+      feedback: const SilentCompletionFeedback(),
+      today: () => LocalDate.parse('2026-10-19'),
+    );
+    c.navigate(TaskView.all);
+    await tester.pumpWidget(MaterialApp(home: TaskHome(controller: c)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('20').first);
+    await tester.pumpAndSettle();
+    expect(c.query.view, TaskView.all);
+    expect(find.text('Завтра дело'), findsOneWidget);
+    expect(find.text('Сегодня дело'), findsNothing);
+    await tester.tap(find.text('20').first);
+    await tester.pumpAndSettle();
+    expect(c.query.day, isNull);
+    expect(find.text('Сегодня дело'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    c.dispose();
+    await db.close();
+  });
+
+  testWidgets('on a phone a long press without moving opens the task menu', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(375, 812);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final db = AppDatabase.memory(workspaceId: 'local');
+    final repo = SqliteTaskRepository(db);
+    await repo.execute(
+      TaskCommand.createTask(
+        id: const Uuid().v4(),
+        title: 'Подержать меня',
+        listId: inboxId,
+        fields: {'dueDate': '2026-10-19'},
+      ),
+    );
+    final c = TaskController(
+      repo,
+      feedback: const SilentCompletionFeedback(),
+      today: () => LocalDate.parse('2026-10-19'),
+    );
+    await tester.pumpWidget(MaterialApp(home: TaskHome(controller: c)));
+    await tester.pumpAndSettle();
+    await tester.longPress(find.text('Подержать меня'));
+    await tester.pumpAndSettle();
+    expect(find.text('Удалить'), findsOneWidget);
+    expect(find.text('Выполнить'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    c.dispose();
+    await db.close();
+  });
 }

@@ -15,9 +15,11 @@ import 'package:flutter_timezone/flutter_timezone.dart';
 
 import '../../domain/models.dart';
 import '../../platform/feedback_service.dart';
+import '../../theme/day_sound.dart';
 import '../../theme/app_theme.dart';
 import 'task_controller.dart';
 import 'task_row.dart' show dueLabel;
+import '../../theme/toast.dart';
 
 class TaskDetailPanel extends StatefulWidget {
   final TaskItem task;
@@ -302,23 +304,17 @@ class _TaskDetailPanelState extends State<TaskDetailPanel> {
   }
 
   Future<void> delete() async {
-    final messenger = ScaffoldMessenger.of(context);
     final controller = widget.controller, id = widget.task.id;
     await controller.deleteTask(id);
-    if (mounted) widget.onClose();
-    if (messenger.mounted) {
-      messenger.showSnackBar(
-        SnackBar(
-          persist: false,
-          duration: MotionTokens.toast,
-          content: const Text('Задача удалена'),
-          action: SnackBarAction(
-            label: 'Отменить',
-            onPressed: () => controller.restoreTask(id),
-          ),
-        ),
-      );
-    }
+    if (!mounted) return;
+    // Shown before closing: the panel's context goes with it.
+    DayToast.show(
+      context,
+      'Задача удалена',
+      action: 'Отменить',
+      onAction: () => controller.restoreTask(id),
+    );
+    widget.onClose();
   }
 
   /// One property line: icon and label on the left, the control on the
@@ -544,14 +540,23 @@ class _TaskDetailPanelState extends State<TaskDetailPanel> {
               ),
             ),
             Divider(color: c.divider),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 12, 16, 12),
-              child: Row(
-                children: [
-                  // Flexible so large text shortens the label, not the layout.
-                  Expanded(
-                    child: Align(
-                      alignment: Alignment.centerLeft,
+            // Figma «Действия»: the whole strip under the line deletes; the
+            // button sits in its middle.
+            Semantics(
+              button: true,
+              label: 'Удалить задачу',
+              excludeSemantics: true,
+              child: MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    DaySound.play(context, UiSound.delete);
+                    delete();
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Center(
                       child: DayButton(
                         kind: DayButtonKind.ghost,
                         destructive: true,
@@ -566,7 +571,7 @@ class _TaskDetailPanelState extends State<TaskDetailPanel> {
                       ),
                     ),
                   ),
-                ],
+                ),
               ),
             ),
           ],

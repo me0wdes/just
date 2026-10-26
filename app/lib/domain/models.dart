@@ -189,6 +189,10 @@ class TaskQuery {
     if (view == TaskView.today && !onDay(task, day ?? today, today)) {
       return false;
     }
+    // «Все задачи» and lists narrow to a picked day without leaving them.
+    if (view != TaskView.today && day != null && !onDay(task, day!, today)) {
+      return false;
+    }
     return true;
   }
 }

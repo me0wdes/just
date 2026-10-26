@@ -96,11 +96,17 @@ class _WeekHeaderState extends State<WeekHeader> {
     final nextCount = [for (var i = 7; i < 14; i++) c.countOn(_plus(monday, i))]
         .fold(0, (a, b) => a + b);
     final phone = widget.phone;
+    final filter = c.query.day;
+    final totalLabel = filter != null
+        ? '${dayName(filter, today)}, ${filter.utc.day} ${_months[filter.utc.month - 1]}'
+        : c.query.view == TaskView.all
+        ? 'Всего'
+        : c.heading;
     Widget strip(LocalDate start, {VoidCallback? onClose, int rows = 1}) =>
         _Strip(
           days: [for (var i = 0; i < 7 * rows; i++) _plus(start, i)],
           today: today,
-          picked: dayView ? picked : null,
+          picked: dayView ? picked : c.query.day,
           count: c.countOn,
           onPick: pick,
           onClose: onClose,
@@ -124,7 +130,7 @@ class _WeekHeaderState extends State<WeekHeader> {
             children: [
               if (!dayView) ...[
                 _Total(
-                  label: c.query.view == TaskView.all ? 'Всего' : c.heading,
+                  label: totalLabel,
                   count: c.tasks.where((t) => !t.completed).length,
                   phone: true,
                 ),
@@ -168,7 +174,7 @@ class _WeekHeaderState extends State<WeekHeader> {
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 524),
                   child: _Total(
-                    label: c.query.view == TaskView.all ? 'Всего' : c.heading,
+                    label: totalLabel,
                     count: c.tasks.where((t) => !t.completed).length,
                     phone: false,
                   ),
@@ -326,7 +332,9 @@ class _Strip extends StatelessWidget {
         final pad = phone ? 8.0 : 10.0, gap = phone ? 6.0 : 10.0;
         final extra = onClose != null ? 42.0 : 0.0;
         final room = box.maxWidth - 2 * pad - extra;
-        final cell = ((room - 6 * gap) / 7).clamp(30.0, 40.0);
+        // Figma «Телефон · текущая неделя»: on a phone the days share the
+        // whole width; on a computer they stay 40 px.
+        final cell = ((room - 6 * gap) / 7).clamp(30.0, phone ? 80.0 : 40.0);
         final radius = phone ? 26.0 : 28.0;
         return Container(
           padding: EdgeInsets.all(pad),
@@ -353,7 +361,7 @@ class _Strip extends StatelessWidget {
                           day: day,
                           width: cell,
                           picked: day == picked,
-                          today: day == today && picked != null,
+                          today: day == today && day != picked,
                           tasks: count(day),
                           onTap: () => onPick(day),
                         ),
@@ -443,7 +451,11 @@ class _Day extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 7),
-                    _Dots(tasks: tasks, color: ink),
+                    _Dots(
+                      tasks: tasks,
+                      color: ink,
+                      plus: picked ? c.screen : c.muted,
+                    ),
                   ],
                 ),
               );
@@ -457,8 +469,8 @@ class _Day extends StatelessWidget {
 
 class _Dots extends StatelessWidget {
   final int tasks;
-  final Color color;
-  const _Dots({required this.tasks, required this.color});
+  final Color color, plus;
+  const _Dots({required this.tasks, required this.color, required this.plus});
   @override
   Widget build(BuildContext context) {
     final dot = Container(
@@ -480,7 +492,8 @@ class _Dots extends StatelessWidget {
             ],
             if (tasks > 3) ...[
               const SizedBox(width: 2),
-              Icon(Icons.add, size: 7, color: color.withValues(alpha: .7)),
+              // Figma «dots / больше 3»: a 5 px plus, 1.4 thick, muted.
+              CustomPaint(size: const Size.square(6), painter: _Plus(plus)),
             ],
           ],
         ),
@@ -614,4 +627,21 @@ class _Chip extends StatelessWidget {
       ),
     );
   }
+}
+
+class _Plus extends CustomPainter {
+  final Color color;
+  const _Plus(this.color);
+  @override
+  void paint(Canvas canvas, Size size) {
+    final p = Paint()
+      ..color = color
+      ..strokeWidth = 1.4
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(const Offset(3, .5), const Offset(3, 5.5), p);
+    canvas.drawLine(const Offset(.5, 3), const Offset(5.5, 3), p);
+  }
+
+  @override
+  bool shouldRepaint(_Plus old) => old.color != color;
 }

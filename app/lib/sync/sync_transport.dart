@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 
 import 'protocol.dart';
@@ -34,7 +35,7 @@ class HttpSyncTransport implements SyncTransport {
     ].contains(endpoint.host);
     if (endpoint.userInfo.isNotEmpty ||
         endpoint.hasQuery ||
-        endpoint.hasFragment ||
+        (endpoint.hasFragment && pin == null) ||
         endpoint.host.isEmpty ||
         !(endpoint.scheme == 'https' ||
             (kDebugMode &&
@@ -47,17 +48,34 @@ class HttpSyncTransport implements SyncTransport {
   static final _context = SecurityContext(withTrustedRoots: true)
     ..setTrustedCertificatesBytes(utf8.encode(letsEncryptRoots));
 
+  /// SHA-256 of the server certificate, from `#pin=…` in the address. A
+  /// direct server signs its own certificate; then only that one is trusted,
+  /// with no certificate authorities at all.
+  String? get pin {
+    final m = RegExp(r'^pin=([0-9a-f]{64})$').firstMatch(endpoint.fragment);
+    return m?.group(1);
+  }
+
+  HttpClient _client() {
+    final pinned = pin;
+    if (pinned == null) return HttpClient(context: _context);
+    return HttpClient(context: SecurityContext(withTrustedRoots: false))
+      ..badCertificateCallback = (cert, host, port) =>
+          host == endpoint.host &&
+          port == endpoint.port &&
+          sha256.convert(cert.der).toString() == pinned;
+  }
+
   @override
   Future<SyncResponse> exchange(SyncRequest request) async {
     final bytes = utf8.encode(jsonEncode(request.toJson()));
     if (bytes.length > 262144) {
       throw const FormatException('Слишком большой пакет изменений');
     }
-    final client = HttpClient(context: _context)
-      ..connectionTimeout = const Duration(seconds: 10);
+    final client = _client()..connectionTimeout = const Duration(seconds: 10);
     Future<SyncResponse> run() async {
       final token = await tokenProvider();
-      final req = await client.postUrl(endpoint);
+      final req = await client.postUrl(endpoint.removeFragment());
       req.followRedirects = false;
       req.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
       req.headers.contentType = ContentType.json;

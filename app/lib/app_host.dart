@@ -22,8 +22,8 @@ import 'platform/update_service.dart';
 import 'sync/connection_service.dart';
 import 'sync/sync_engine.dart';
 import 'sync/sync_transport.dart';
-import 'theme/motion_tokens.dart';
 import 'theme/controls.dart';
+import 'theme/toast.dart';
 
 class DayHost extends StatefulWidget {
   final AppDatabase rootDatabase, taskDatabase;
@@ -91,39 +91,31 @@ class _DayHostState extends State<DayHost> with WidgetsBindingObserver {
     _offeredUpdate = update.version;
     final context = navigatorKey.currentContext;
     if (context == null || !context.mounted) return;
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.showSnackBar(
-      SnackBar(
-        persist: false,
-        duration: const Duration(seconds: 12),
-        content: Text('Вышла версия ${update.version}'),
-        action: SnackBarAction(
-          label: 'Обновить',
-          onPressed: () async {
-            final dialogContext = navigatorKey.currentContext;
-            // The installed Windows build shows its own progress window.
-            if (installsInPlace(update) &&
-                dialogContext != null &&
-                dialogContext.mounted) {
-              _offeredUpdate = null;
-              await showUpdateDialog(dialogContext, update);
-              return;
-            }
-            try {
-              await openDownload(update);
-            } catch (_) {
-              _offeredUpdate = null;
-              messenger.showSnackBar(
-                const SnackBar(
-                  persist: false,
-                  duration: MotionTokens.toast,
-                  content: Text('Не удалось открыть загрузку'),
-                ),
-              );
-            }
-          },
-        ),
-      ),
+    DayToast.show(
+      context,
+      'Вышла версия ${update.version}',
+      duration: const Duration(seconds: 12),
+      action: 'Обновить',
+      onAction: () async {
+        final dialogContext = navigatorKey.currentContext;
+        // The installed Windows build shows its own progress window.
+        if (installsInPlace(update) &&
+            dialogContext != null &&
+            dialogContext.mounted) {
+          _offeredUpdate = null;
+          await showUpdateDialog(dialogContext, update);
+          return;
+        }
+        try {
+          await openDownload(update);
+        } catch (_) {
+          _offeredUpdate = null;
+          final c = navigatorKey.currentContext;
+          if (c != null && c.mounted) {
+            DayToast.show(c, 'Не удалось открыть загрузку');
+          }
+        }
+      },
     );
   }
 
@@ -253,24 +245,15 @@ class _DayHostState extends State<DayHost> with WidgetsBindingObserver {
     _shownConflict = conflict['operationId'] as String;
     final context = navigatorKey.currentContext;
     if (context == null || !context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        // A sync conflict note is long, so it stays longer than a toast.
-        persist: false,
-        duration: const Duration(seconds: 8),
-        content: Text(
-          conflict['code'] == 'successor_absent'
-              ? 'Повтор отменён на другом устройстве. Ваши правки сохранены отдельными задачами.'
-              : 'Отмена не выполнена: следующая задача уже изменена.',
-        ),
-        action: conflict['successorId'] == null
-            ? null
-            : SnackBarAction(
-                label: 'Открыть',
-                onPressed: () =>
-                    controller.requestOpen(conflict['successorId'] as String),
-              ),
-      ),
+    // A sync conflict note is long, so it stays longer than a toast.
+    DayToast.show(
+      context,
+      conflict['code'] == 'successor_absent'
+          ? 'Повтор отменён на другом устройстве. Ваши правки сохранены отдельными задачами.'
+          : 'Отмена не выполнена: следующая задача уже изменена.',
+      duration: const Duration(seconds: 8),
+      action: conflict['successorId'] == null ? null : 'Открыть',
+      onAction: () => controller.requestOpen(conflict['successorId'] as String),
     );
   }
 

@@ -54,13 +54,19 @@ class TaskController extends ChangeNotifier {
         : t.listIds.contains(query.listId);
   }).length;
 
+  /// Picks a day in the calendar and stays in the current view. In
+  /// «Сегодня» today means no filter; elsewhere the same day again clears it.
   void selectDay(LocalDate date) {
     selectedId = null;
+    final clear = query.view == TaskView.today
+        ? date == today()
+        : date == query.day;
     setQuery(
       TaskQuery(
-        view: TaskView.today,
+        view: query.view,
+        listId: query.listId,
         today: today(),
-        day: date == today() ? null : date,
+        day: clear ? null : date,
         includeCompleted: true,
       ),
     );
@@ -146,8 +152,9 @@ class TaskController extends ChangeNotifier {
             ? 1024
             : tasks.map((t) => t.position).reduce((a, b) => a > b ? a : b) +
                   1024,
-        // A task added in the day view is due on the day being shown.
-        if (query.view == TaskView.today) 'dueDate': day.toString(),
+        // A task added while a day is shown is due on that day.
+        if (query.view == TaskView.today || query.day != null)
+          'dueDate': day.toString(),
       },
     ),
   );

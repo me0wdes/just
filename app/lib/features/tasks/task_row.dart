@@ -48,6 +48,9 @@ class TaskRow extends StatefulWidget {
 
   /// Right click: the menu that replaced the row's «…».
   final void Function(Offset globalPosition)? onMenu;
+
+  /// Opens [onMenu] on a long press (touch, when no drag owns it).
+  final bool longPressMenu;
   final bool selected;
   final LocalDate? today;
   const TaskRow({
@@ -56,6 +59,7 @@ class TaskRow extends StatefulWidget {
     required this.onToggle,
     required this.onOpen,
     this.onMenu,
+    this.longPressMenu = false,
     this.selected = false,
     this.today,
   });
@@ -132,6 +136,14 @@ class _TaskRowState extends State<TaskRow> {
               onSecondaryTapUp: widget.onMenu == null
                   ? null
                   : (d) => widget.onMenu!(d.globalPosition),
+              onLongPress: widget.onMenu == null || !widget.longPressMenu
+                  ? null
+                  : () {
+                      final box = context.findRenderObject() as RenderBox;
+                      widget.onMenu!(
+                        box.localToGlobal(box.size.center(Offset.zero)),
+                      );
+                    },
               hoverColor: Colors.transparent,
               focusColor: c.track,
               child: ConstrainedBox(

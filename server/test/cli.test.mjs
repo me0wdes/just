@@ -22,3 +22,15 @@ test('CLI serves each person from users/<name> and keeps their tasks apart',asyn
  assert.deepEqual(await titles(owner),['Задача владельца']);assert.deepEqual(await titles(mama),['Задача мамы']);
  assert.equal((await send('not a hash')).status,401);
 });
+test('CLI answers HTTPS itself with its own certificate',async t=>{
+ const {directory,cleanup}=temporaryStore();const token=randomBytes(32).toString('base64url');
+ const {execFileSync}=await import('node:child_process');
+ execFileSync('openssl',['req','-x509','-newkey','ec','-pkeyopt','ec_paramgen_curve:prime256v1','-nodes','-days','1','-subj','/CN=Just sync','-addext','subjectAltName=IP:127.0.0.1','-keyout',join(directory,'key.pem'),'-out',join(directory,'cert.pem')],{stdio:'ignore'});
+ const child=spawn(process.execPath,['src/index.mjs','--data',directory,'--port','0','--tls-cert',join(directory,'cert.pem'),'--tls-key',join(directory,'key.pem')],{cwd:new URL('../',import.meta.url),env:{...process.env,DAY_SYNC_TOKEN:token},windowsHide:true});
+ t.after(async()=>{child.kill();await once(child,'exit');cleanup();});
+ const port=await new Promise((resolve,reject)=>{let output='';child.stdout.on('data',chunk=>{output+=chunk;const match=output.match(/https:\/\/127\.0\.0\.1:(\d+)/);if(match)resolve(match[1]);});child.on('exit',code=>reject(Error('CLI exited '+code)));});
+ const {request:https}=await import('node:https');const {readFileSync}=await import('node:fs');
+ // Trusting only that certificate, as the app does with its pin.
+ const status=await new Promise((resolve,reject)=>{const req=https({host:'127.0.0.1',port,path:'/sync',method:'POST',ca:readFileSync(join(directory,'cert.pem')),headers:{authorization:`Bearer ${token}`,'content-type':'application/json'}},res=>{res.resume();resolve(res.statusCode);});req.on('error',reject);req.end(JSON.stringify(request([])));});
+ assert.equal(status,200);
+});

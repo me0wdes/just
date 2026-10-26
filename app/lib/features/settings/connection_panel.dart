@@ -3,11 +3,14 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 
 import '../../theme/app_theme.dart';
 import '../../theme/controls.dart';
+import '../../platform/feedback_service.dart';
 import '../../theme/day_icon.dart';
+import '../../theme/day_sound.dart';
 import '../../theme/fluid_button.dart';
 import '../../theme/motion_tokens.dart';
 import '../../theme/segments.dart';
@@ -328,17 +331,55 @@ const installCommand =
     final endpoint = Uri.parse(json['u'] as String);
     final key = json['k'] as String;
     if (endpoint.scheme != 'https' || key.isEmpty) return null;
-    return (endpoint: endpoint, key: key);
+    // A direct server sends its certificate fingerprint; it rides along in
+    // the address as #pin=… and the transport trusts only that certificate.
+    final pin = json['p'];
+    if (pin == null) return (endpoint: endpoint, key: key);
+    if (pin is! String || !RegExp(r'^[0-9a-f]{64}$').hasMatch(pin)) {
+      return null;
+    }
+    return (endpoint: endpoint.replace(fragment: 'pin=$pin'), key: key);
   } catch (_) {
     return null;
   }
 }
 
 /// A command to copy: the text on top, «Скопировать» under it, so a long
-/// line keeps its width on a phone too.
-class _CommandBox extends StatelessWidget {
+/// line keeps its width on a phone too. The button itself confirms the copy
+/// for two seconds: a toast would land under the settings dialog.
+class _CommandBox extends StatefulWidget {
   final String command;
   const _CommandBox({required this.command});
+  @override
+  State<_CommandBox> createState() => _CommandBoxState();
+}
+
+class _CommandBoxState extends State<_CommandBox> {
+  bool copied = false;
+  Timer? reset;
+
+  Future<void> copy() async {
+    await Clipboard.setData(ClipboardData(text: widget.command));
+    if (!mounted) return;
+    DaySound.play(context, UiSound.complete);
+    SemanticsService.sendAnnouncement(
+      View.of(context),
+      'Команда скопирована',
+      TextDirection.ltr,
+    );
+    setState(() => copied = true);
+    reset?.cancel();
+    reset = Timer(const Duration(seconds: 2), () {
+      if (mounted) setState(() => copied = false);
+    });
+  }
+
+  @override
+  void dispose() {
+    reset?.cancel();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = DayColors.of(context);
@@ -353,25 +394,32 @@ class _CommandBox extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SelectableText(
-            command,
+            widget.command,
             style: Theme.of(context).textTheme.bodyMedium!
                 .copyWith(fontSize: 13, height: 18 / 13, color: c.text),
           ),
           const SizedBox(height: 8),
           DayButton(
             kind: DayButtonKind.secondary,
-            onPressed: () {
-              Clipboard.setData(ClipboardData(text: command));
-              ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-                const SnackBar(
-                  persist: false,
-                  duration: MotionTokens.toast,
-                  content: Text('Команда скопирована'),
-                ),
-              );
-            },
-            icon: DayIcon(DayGlyph.copy, size: 16, color: c.text),
-            label: const Text('Скопировать'),
+            sound: null,
+            onPressed: copy,
+            icon: AnimatedSwitcher(
+              duration: MotionTokens.duration(context, MotionTokens.fast),
+              child: copied
+                  ? DayIcon(
+                      DayGlyph.check,
+                      key: const ValueKey('done'),
+                      size: 16,
+                      color: c.done,
+                    )
+                  : DayIcon(
+                      DayGlyph.copy,
+                      key: const ValueKey('copy'),
+                      size: 16,
+                      color: c.text,
+                    ),
+            ),
+            label: Text(copied ? 'Скопировано' : 'Скопировать'),
           ),
         ],
       ),
@@ -381,19 +429,23 @@ class _CommandBox extends StatelessWidget {
 
 /// What went wrong, in words a person can act on.
 String connectionError(Object e, String address) {
-  final host = Uri.tryParse(address)?.host ?? address;
+  final uri = Uri.tryParse(address);
+  final host = uri?.host ?? address;
+  final port = uri?.hasPort == true ? uri!.port : 443;
+  final pinned = uri?.fragment.startsWith('pin=') ?? false;
   return switch (e) {
     FormatException(:final message) => message,
     SyncHttpException(status: 401) =>
       'Ключ не подошёл. Скопируйте строку подключения ещё раз целиком.',
     SyncHttpException(:final status) => 'Сервер ответил ошибкой $status.',
+    HandshakeException() || TlsException() when pinned => 'Сертификат сервера не совпадает со строкой подключения. Возьмите строку заново на сервере: sudo just-sync owner',
     HandshakeException() || TlsException() =>
       'Сервер $host нашёлся, но его сертификат не принят. Проверьте, что HTTPS настроен.',
     SocketException(:final message, :final osError)
         when '$message ${osError?.message}'.contains('lookup') =>
       'Не удаётся найти сервер $host. Проверьте интернет или адрес.',
     SocketException() || TimeoutException() =>
-      'Сервер $host не отвечает. Проверьте, что он включён и порт 443 открыт.',
+      'Сервер $host не отвечает на порту $port. Проверьте, что он включён и порт $port открыт у хостинга.',
     _ => 'Не удалось подключиться: $e',
   };
 }
