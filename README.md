@@ -5,9 +5,9 @@
 ## Скачать
 
 <!-- releases -->
-**Текущая версия 0.2.11:** [Windows](https://github.com/me0wdes/just/releases/download/v0.2.11/Just-Setup-0.2.11.exe) · [macOS](https://github.com/me0wdes/just/releases/download/v0.2.11/Just-0.2.11.dmg) · [Android](https://github.com/me0wdes/just/releases/download/v0.2.11/Just-0.2.11-Android.apk)
+**Текущая версия 0.2.12:** [Windows](https://github.com/me0wdes/just/releases/download/v0.2.12/Just-Setup-0.2.12.exe) · [macOS](https://github.com/me0wdes/just/releases/download/v0.2.12/Just-0.2.12.dmg) · [Android](https://github.com/me0wdes/just/releases/download/v0.2.12/Just-0.2.12-Android.apk)
 
-Прошлые версии: [0.2.10](https://github.com/me0wdes/just/releases/tag/v0.2.10) · [0.2.9](https://github.com/me0wdes/just/releases/tag/v0.2.9) · [0.2.8](https://github.com/me0wdes/just/releases/tag/v0.2.8) · [все релизы](https://github.com/me0wdes/just/releases)
+Прошлые версии: [0.2.11](https://github.com/me0wdes/just/releases/tag/v0.2.11) · [0.2.10](https://github.com/me0wdes/just/releases/tag/v0.2.10) · [0.2.9](https://github.com/me0wdes/just/releases/tag/v0.2.9) · [все релизы](https://github.com/me0wdes/just/releases)
 <!-- /releases -->
 
 **Windows:** `Just-Setup-….exe`, права администратора не нужны. **macOS:** откройте `.dmg` и перетащите Just в «Программы». **Android:** откройте `.apk` на телефоне. Сборки пока без подписи магазинов: Windows и macOS спросят подтверждение при первом запуске. Новые версии Just предлагает сам.

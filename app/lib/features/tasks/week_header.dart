@@ -7,6 +7,7 @@ import '../../theme/controls.dart';
 import '../../theme/day_icon.dart';
 import '../../theme/day_sound.dart';
 import '../../theme/fluid_surface.dart';
+import '../../theme/goo_text.dart';
 import '../../theme/motion_tokens.dart';
 import 'greeting_header.dart' show FlowPalette, RoseGoldField;
 import 'task_controller.dart';
@@ -272,19 +273,15 @@ class _Island extends StatelessWidget {
             ? BorderRadius.circular(22)
             : const BorderRadius.vertical(bottom: Radius.circular(24)),
       ),
+      // goo-word-morph keeps the width in step with the new day (680 ms).
+      // AnimatedSize with a zero duration re-dirties its own layout, so
+      // reduced motion skips it.
       child: reduce
           ? text
           : AnimatedSize(
-              duration: MotionTokens.moderate,
-              curve: MotionTokens.easeOut,
-              child: AnimatedSwitcher(
-                duration: MotionTokens.moderate,
-                layoutBuilder: (current, previous) => Stack(
-                  alignment: Alignment.center,
-                  children: [...previous, ?current],
-                ),
-                child: text,
-              ),
+              duration: const Duration(milliseconds: 680),
+              curve: const Cubic(.22, 1, .36, 1),
+              child: GooText(swapKey: day, fontSize: 15, child: text),
             ),
     );
   }
@@ -343,13 +340,17 @@ class _Strip extends StatelessWidget {
                   children: [
                     for (final (k, day) in row.indexed) ...[
                       if (k > 0) SizedBox(width: gap),
-                      _Day(
-                        day: day,
-                        width: cell,
-                        picked: day == picked,
-                        today: day == today && picked != null,
-                        tasks: count(day),
-                        onTap: () => onPick(day),
+                      FadeUp(
+                        key: ValueKey(day),
+                        index: i * 7 + k,
+                        child: _Day(
+                          day: day,
+                          width: cell,
+                          picked: day == picked,
+                          today: day == today && picked != null,
+                          tasks: count(day),
+                          onTap: () => onPick(day),
+                        ),
                       ),
                     ],
                     if (onClose != null) ...[
@@ -530,6 +531,11 @@ class _Total extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = DayColors.of(context);
     final text = Theme.of(context).textTheme.bodyMedium!;
+    final big = text.copyWith(
+      fontSize: phone ? 36 : 48,
+      height: phone ? 44 / 36 : 56 / 48,
+      color: c.text,
+    );
     return Container(
       width: phone ? double.infinity : 524,
       padding: phone
@@ -545,18 +551,34 @@ class _Total extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: text.copyWith(fontSize: 13, height: 18 / 13, color: c.muted),
+          GooText(
+            swapKey: label,
+            fontSize: 13,
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: text.copyWith(
+                fontSize: 13,
+                height: 18 / 13,
+                color: c.muted,
+              ),
+            ),
           ),
-          Text(
-            '$count ${_plural(count, 'задача', 'задачи', 'задач')}',
-            style: text.copyWith(
-              fontSize: phone ? 36 : 48,
-              height: phone ? 44 / 36 : 56 / 48,
-              color: c.text,
+          // The count rolls like an odometer; the word follows its form.
+          GooText(
+            swapKey: 0,
+            fontSize: phone ? 36 : 48,
+            delay: const Duration(milliseconds: 300),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                RollingNumber(value: count, style: big),
+                Text(
+                  ' ${_plural(count, 'задача', 'задачи', 'задач')}',
+                  style: big,
+                ),
+              ],
             ),
           ),
         ],
