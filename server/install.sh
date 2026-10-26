@@ -43,6 +43,7 @@ git clone -q --depth 1 "$REPO" "$src"
 rm -rf "$APP"
 cp -r "$src/server" "$APP"
 git -C "$src" rev-parse HEAD > "$APP/.revision"
+chmod +x "$APP/just-sync.sh" && ln -sf "$APP/just-sync.sh" /usr/local/bin/just-sync
 rm -rf "$src"
 (cd "$APP" && npm ci --omit=dev --silent)
 id -u just-sync >/dev/null 2>&1 || useradd --system --home "$DATA" --shell /usr/sbin/nologin just-sync
@@ -54,7 +55,6 @@ if [[ ! -f $ENV_FILE ]]; then
   umask 077
   echo "DAY_SYNC_TOKEN=$(node "$APP/src/index.mjs" --generate-token)" > "$ENV_FILE"
 fi
-token=$(sed -n 's/^DAY_SYNC_TOKEN=//p' "$ENV_FILE")
 
 cat > /etc/systemd/system/just-sync.service <<EOF
 [Unit]
@@ -84,7 +84,7 @@ Description=Just sync backup
 [Service]
 Type=oneshot
 User=just-sync
-ExecStart=/bin/sh -c 'sqlite3 $DATA/sync.sqlite ".backup $DATA/backups/sync-\$(date +%%F).sqlite" && find $DATA/backups -name "sync-*.sqlite" -mtime +14 -delete'
+ExecStart=/bin/bash $APP/just-sync.sh backup
 EOF
 cat > /etc/systemd/system/just-sync-backup.timer <<EOF
 [Unit]
@@ -208,10 +208,6 @@ done
 
 # The key never goes to the journal of the nightly update.
 [[ -n ${JUST_AUTO:-} ]] && { echo "Обновлено до $(cat "$APP/.revision")"; exit 0; }
-conn="just1:$(printf '{"u":"%s","k":"%s"}' "$endpoint" "$token" | base64 -w0 | tr '+/' '-_' | tr -d '=')"
-say "Готово. Строка подключения (в Just: Настройки → Хранение данных → Свой сервер):"
-echo
-echo "$conn"
-echo
-qrencode -t ansiutf8 "$conn" || true
-echo "Строка содержит ключ доступа: храните её как пароль. Снова показать: sudo bash $APP/install.sh"
+say "Готово. Ваша строка подключения:"
+bash "$APP/just-sync.sh" owner
+echo "Показать снова: sudo just-sync owner. Добавить ещё человека: sudo just-sync add <имя>"
