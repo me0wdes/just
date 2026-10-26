@@ -7,7 +7,7 @@ import '../../theme/controls.dart';
 import '../../theme/day_icon.dart';
 import '../../theme/day_sound.dart';
 import '../../theme/fluid_surface.dart';
-import '../../theme/goo_text.dart';
+import '../../theme/blur_text.dart';
 import '../../theme/motion_tokens.dart';
 import 'greeting_header.dart' show FlowPalette, RoseGoldField;
 import 'task_controller.dart';
@@ -159,16 +159,22 @@ class _WeekHeaderState extends State<WeekHeader> {
                 _MorePill(count: nextCount, onTap: open),
             ],
           )
-        : Wrap(
-            alignment: WrapAlignment.center,
-            spacing: 16,
-            runSpacing: 16,
+        : Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _Total(
-                label: c.query.view == TaskView.all ? 'Всего' : c.heading,
-                count: c.tasks.where((t) => !t.completed).length,
-                phone: false,
+              // Figma: 524 wide; narrower windows shrink it, the weeks stay.
+              Flexible(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 524),
+                  child: _Total(
+                    label: c.query.view == TaskView.all ? 'Всего' : c.heading,
+                    count: c.tasks.where((t) => !t.completed).length,
+                    phone: false,
+                  ),
+                ),
               ),
+              const SizedBox(width: 16),
               strip(monday, rows: 3),
             ],
           );
@@ -273,7 +279,7 @@ class _Island extends StatelessWidget {
             ? BorderRadius.circular(22)
             : const BorderRadius.vertical(bottom: Radius.circular(24)),
       ),
-      // goo-word-morph keeps the width in step with the new day (680 ms).
+      // The width follows the new day while the text swaps through a blur.
       // AnimatedSize with a zero duration re-dirties its own layout, so
       // reduced motion skips it.
       child: reduce
@@ -281,7 +287,7 @@ class _Island extends StatelessWidget {
           : AnimatedSize(
               duration: const Duration(milliseconds: 680),
               curve: const Cubic(.22, 1, .36, 1),
-              child: GooText(swapKey: day, fontSize: 15, child: text),
+              child: BlurSwap(swapKey: day, child: text),
             ),
     );
   }
@@ -537,7 +543,7 @@ class _Total extends StatelessWidget {
       color: c.text,
     );
     return Container(
-      width: phone ? double.infinity : 524,
+      width: double.infinity,
       padding: phone
           ? const EdgeInsets.symmetric(horizontal: 24, vertical: 20)
           : const EdgeInsets.all(28),
@@ -551,9 +557,8 @@ class _Total extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          GooText(
+          BlurSwap(
             swapKey: label,
-            fontSize: 13,
             child: Text(
               label,
               maxLines: 1,
@@ -565,20 +570,14 @@ class _Total extends StatelessWidget {
               ),
             ),
           ),
-          // The count rolls like an odometer; the word follows its form.
-          GooText(
-            swapKey: 0,
-            fontSize: phone ? 36 : 48,
-            delay: const Duration(milliseconds: 300),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                RollingNumber(value: count, style: big),
-                Text(
-                  ' ${_plural(count, 'задача', 'задачи', 'задач')}',
-                  style: big,
-                ),
-              ],
+          BlurSwap(
+            swapKey: count,
+            delay: const Duration(milliseconds: 100),
+            child: Text(
+              '$count ${_plural(count, 'задача', 'задачи', 'задач')}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: big,
             ),
           ),
         ],
