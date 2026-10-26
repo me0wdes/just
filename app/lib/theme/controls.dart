@@ -100,6 +100,8 @@ class _DayButtonState extends State<DayButton> {
             : Colors.transparent,
     };
     final iconOnly = widget.label == null;
+    // Phones get 44 px touch targets; computers keep the 36 px grid.
+    final size = MediaQuery.sizeOf(context).width < 600 ? 44.0 : controlHeight;
     final inset = pressed && !reduce ? 1.0 : 0.0;
     Widget body = Row(
       mainAxisSize: widget.expand ? MainAxisSize.max : MainAxisSize.min,
@@ -151,8 +153,8 @@ class _DayButtonState extends State<DayButton> {
           button: true,
           enabled: enabled,
           child: SizedBox(
-            height: controlHeight,
-            width: iconOnly ? controlHeight : null,
+            height: size,
+            width: iconOnly ? size : null,
             child: AnimatedContainer(
               duration: reduce ? Duration.zero : (pressed ? _press : _release),
               curve: pressed ? Curves.easeOut : _releaseCurve,
@@ -1138,18 +1140,17 @@ class DayDialog extends StatelessWidget {
               ],
               if (actions.isNotEmpty) ...[
                 const SizedBox(height: 20),
-                Row(
-                  children: [
-                    if (actions.length > 1) actions.first,
-                    const Spacer(),
-                    for (final (i, a)
-                        in actions
-                            .skip(actions.length > 1 ? 1 : 0)
-                            .indexed) ...[
-                      if (i > 0) const SizedBox(width: 8),
-                      a,
-                    ],
-                  ],
+                // In a row when they fit (first left, the rest right); on a
+                // narrow phone they stack, the main action on top.
+                OverflowBar(
+                  alignment: actions.length == 1
+                      ? MainAxisAlignment.end
+                      : MainAxisAlignment.spaceBetween,
+                  spacing: 8,
+                  overflowSpacing: 8,
+                  overflowAlignment: OverflowBarAlignment.end,
+                  overflowDirection: VerticalDirection.up,
+                  children: actions,
                 ),
               ],
             ],

@@ -11,22 +11,32 @@ import '../../theme/controls.dart';
 import '../../platform/feedback_service.dart';
 import '../../theme/day_icon.dart';
 import '../../theme/day_sound.dart';
-import '../../theme/fluid_button.dart';
 import '../../theme/motion_tokens.dart';
 import '../../theme/segments.dart';
 
 import '../../sync/connection_service.dart';
+import '../../sync/sync_engine.dart';
 import '../../sync/sync_transport.dart';
 
 class ConnectionPanel extends StatefulWidget {
   final ConnectionService service;
-  final bool connected;
+
+  /// Running sync, null when this device is not syncing.
+  final SyncEngine? engine;
+
+  /// Where this device syncs, shown under «Синхронизация включена».
+  final String? server;
+
+  /// A connection was saved, but its key could not be read on this start.
+  final bool lost;
   final Future<void> Function(ConnectionResult) onConnected;
   final Future<void> Function() onDisconnected;
   const ConnectionPanel({
     super.key,
     required this.service,
-    required this.connected,
+    this.engine,
+    this.server,
+    this.lost = false,
     required this.onConnected,
     required this.onDisconnected,
   });
@@ -38,7 +48,8 @@ class _ConnectionPanelState extends State<ConnectionPanel> {
   final endpoint = TextEditingController(),
       key = TextEditingController(),
       link = TextEditingController();
-  late bool serverMode = widget.connected;
+  bool get connected => widget.engine != null;
+  late bool serverMode = connected || widget.lost;
   bool manual = false;
   bool busy = false;
   String? error;
@@ -68,7 +79,7 @@ class _ConnectionPanelState extends State<ConnectionPanel> {
           title: const Text('Подключить устройства'),
           content: SingleChildScrollView(
             child: Text(
-              'На устройстве: ${preview.localCount} задач\nНа сервере: ${preview.remoteCount}\nСовпадающих id: ${preview.matchingCount}\nНеотправленных изменений: ${preview.pendingCount}\n\nПри объединении локальные поля заменят совпадающие данные. Отдельный набор сохранит прежние задачи и очередь на этом устройстве. В обоих случаях сохраним резервную копию.',
+              'На этом устройстве ${tasks(preview.localCount)}, на сервере ${preview.remoteCount}.\n\nОбъединить: задачи отсюда появятся на сервере и на других устройствах.\nОткрыть отдельно: здесь будут только задачи с сервера, а эти останутся в резервной копии.\n\nКопию сохраним в любом случае.',
             ),
           ),
           actions: [
@@ -125,7 +136,7 @@ class _ConnectionPanelState extends State<ConnectionPanel> {
   }
 
   Future<void> pickMode(int index) async {
-    if (index == 0 && widget.connected) {
+    if (index == 0 && (connected || widget.lost)) {
       final ok = await showDialog<bool>(
         context: context,
         builder: (context) => DayDialog(
@@ -202,24 +213,91 @@ class _ConnectionPanelState extends State<ConnectionPanel> {
         const SizedBox(height: 10),
         if (!serverMode)
           Text('Задачи хранятся только здесь, без синхронизации.', style: small)
-        else if (widget.connected) ...[
-          Row(
-            children: [
-              DayIcon(DayGlyph.cloud, size: 16, color: c.done),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Синхронизация включена',
-                  style: theme.textTheme.bodyMedium!.copyWith(color: c.text),
-                ),
-              ),
-              FluidButton.text(
-                onPressed: busy ? null : disconnect,
-                child: const Text('Отключить'),
-              ),
-            ],
+        else if (connected) ...[
+          // Figma «Хранение данных · Подключено»: the server and how sync
+          // is doing, live while the settings stay open.
+          ListenableBuilder(
+            listenable: widget.engine!,
+            builder: (context, _) {
+              final engine = widget.engine!;
+              final ok = engine.state == SyncState.synced;
+              final at = engine.lastSuccessAt?.toLocal();
+              final status = ok && at != null
+                  ? 'Синхронизировано в ${at.hour.toString().padLeft(2, '0')}:${at.minute.toString().padLeft(2, '0')}'
+                  : engine.state.label;
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: DayIcon(
+                          DayGlyph.cloud,
+                          size: 16,
+                          color: switch (engine.state) {
+                            SyncState.offline ||
+                            SyncState.authRequired ||
+                            SyncState.rejected => c.overdue,
+                            _ => c.done,
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Синхронизация включена',
+                              style: theme.textTheme.bodyMedium!.copyWith(
+                                color: c.text,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              [?widget.server, status].join('\n'),
+                              key: const Key('sync-server'),
+                              style: small,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      DayButton(
+                        kind: DayButtonKind.secondary,
+                        onPressed: busy || engine.state == SyncState.syncing
+                            ? null
+                            : engine.syncNow,
+                        label: const Text('Синхронизировать'),
+                      ),
+                      DayButton(
+                        kind: DayButtonKind.ghost,
+                        onPressed: busy ? null : disconnect,
+                        label: const Text('Отключить'),
+                      ),
+                    ],
+                  ),
+                ],
+              );
+            },
           ),
         ] else ...[
+          if (widget.lost) ...[
+            Text(
+              'Подключение потеряно: Just не смог прочитать ключ на этом устройстве. Задачи на месте. Вставьте строку подключения ещё раз (шаг 4), и синхронизация продолжится.',
+              key: const Key('sync-lost'),
+              style: small.copyWith(color: c.overdue),
+            ),
+            const SizedBox(height: 14),
+          ],
           // Figma «Хранение данных · Сервер»: four steps a non-admin can follow.
           Text(
             'Задачи синхронизируются между устройствами через ваш собственный сервер. Понадобится сервер с Linux: его можно арендовать у любого хостинга.',
@@ -299,9 +377,7 @@ class _ConnectionPanelState extends State<ConnectionPanel> {
                     error = null;
                   }),
             label: Text(
-              manual
-                  ? 'Вставить строку из буфера'
-                  : 'Ввести адрес и ключ вручную',
+              manual ? 'Вставить строку из буфера' : 'Ввести адрес и ключ',
             ),
           ),
         ],
@@ -314,6 +390,21 @@ class _ConnectionPanelState extends State<ConnectionPanel> {
     );
   }
 }
+
+String tasks(int n) {
+  final last = n % 10, tens = n % 100;
+  final word = last == 1 && tens != 11
+      ? 'задача'
+      : last >= 2 && last <= 4 && (tens < 12 || tens > 14)
+      ? 'задачи'
+      : 'задач';
+  return '$n $word';
+}
+
+/// `host` or `host:port`, the way the installer prints the server.
+String serverName(Uri endpoint) => endpoint.hasPort && endpoint.port != 443
+    ? '${endpoint.host}:${endpoint.port}'
+    : endpoint.host;
 
 const installCommand =
     'curl -fsSL https://raw.githubusercontent.com/me0wdes/just/main/server/install.sh | sudo bash';

@@ -21,6 +21,7 @@ import 'platform/update_dialog.dart';
 import 'platform/update_service.dart';
 import 'sync/connection_service.dart';
 import 'sync/sync_engine.dart';
+import 'features/settings/connection_panel.dart' show serverName;
 import 'sync/sync_transport.dart';
 import 'theme/controls.dart';
 import 'theme/toast.dart';
@@ -30,6 +31,7 @@ class DayHost extends StatefulWidget {
   final Directory directory;
   final SettingsController settings;
   final ConnectionSecret? secret;
+  final bool connectionLost;
   final String deviceId;
   final NotificationPort? notificationPort;
   const DayHost({
@@ -41,6 +43,7 @@ class DayHost extends StatefulWidget {
     required this.deviceId,
     this.notificationPort,
     this.secret,
+    this.connectionLost = false,
   });
   @override
   State<DayHost> createState() => _DayHostState();
@@ -54,6 +57,7 @@ class _DayHostState extends State<DayHost> with WidgetsBindingObserver {
   late ConnectionService connections;
   SyncEngine? engine;
   ConnectionSecret? secret;
+  late bool connectionLost = widget.connectionLost;
   late final audio = AssetCompletionAudio()
     ..preload()
     ..keepAwake(widget.settings.completionSoundEnabled);
@@ -228,6 +232,7 @@ class _DayHostState extends State<DayHost> with WidgetsBindingObserver {
     final previous = database;
     database = result.database;
     secret = result.secret;
+    connectionLost = false;
     configure();
     setState(() {});
     if (previous != widget.rootDatabase) await previous.close();
@@ -260,6 +265,7 @@ class _DayHostState extends State<DayHost> with WidgetsBindingObserver {
   Future<void> disconnect() async {
     await stopSync();
     secret = null;
+    connectionLost = false;
     setState(() {});
   }
 
@@ -339,6 +345,8 @@ class _DayHostState extends State<DayHost> with WidgetsBindingObserver {
     connections: connections,
     onConnected: activateWorkspace,
     onDisconnected: disconnect,
+    connectionLost: connectionLost,
+    server: secret == null ? null : serverName(secret!.endpoint),
     onRequestReminder: requestReminder,
     navigatorKey: navigatorKey,
   );

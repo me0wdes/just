@@ -6,6 +6,7 @@ import 'features/tasks/task_home.dart';
 import 'platform/feedback_service.dart';
 import 'theme/app_theme.dart';
 import 'theme/day_sound.dart';
+import 'theme/toast.dart';
 import 'data/backup_repository.dart';
 import 'features/settings/settings_controller.dart';
 import 'features/settings/settings_panel.dart';
@@ -24,6 +25,12 @@ class DayApp extends StatelessWidget {
   final ConnectionService? connections;
   final Future<void> Function(ConnectionResult)? onConnected;
   final Future<void> Function()? onDisconnected;
+
+  /// A connection was saved, but its key could not be read on this start.
+  final bool connectionLost;
+
+  /// Where this device syncs, e.g. `104.171.128.200:8443`.
+  final String? server;
   final Future<bool> Function()? onRequestReminder;
   final GlobalKey<NavigatorState>? navigatorKey;
   const DayApp({
@@ -36,6 +43,8 @@ class DayApp extends StatelessWidget {
     this.connections,
     this.onConnected,
     this.onDisconnected,
+    this.connectionLost = false,
+    this.server,
     this.onRequestReminder,
     this.navigatorKey,
   });
@@ -64,7 +73,7 @@ class DayApp extends StatelessWidget {
           controller: controller,
           onRequestReminder: onRequestReminder,
           onSync: engine == null
-              ? null
+              ? (connectionLost ? () => openSettings(context) : null)
               : () async {
                   if (engine!.state == SyncState.rejected && backups != null) {
                     await showDialog<void>(
@@ -75,49 +84,53 @@ class DayApp extends StatelessWidget {
                   }
                   await engine!.syncNow();
                 },
-          syncLabel: engine == null
-              ? 'Сохранено на устройстве'
-              : switch (engine!.state) {
-                  SyncState.localSaved => 'Сохранено на устройстве',
-                  SyncState.syncing => 'Синхронизация…',
-                  SyncState.synced => 'Всё синхронизировано',
-                  SyncState.offline => 'Без сети · задачи сохранены',
-                  SyncState.authRequired =>
-                    'Проверьте подключение в настройках',
-                  SyncState.rejected =>
-                    'Есть конфликт · локальная копия сохранена',
-                },
+          syncLabel:
+              engine?.state.label ??
+              (connectionLost
+                  ? SyncState.authRequired.label
+                  : SyncState.localSaved.label),
           onSettings: settings == null || backups == null
               ? null
-              : () {
-                  DaySound.play(context, UiSound.open);
-                  showDialog<void>(
-                    context: context,
-                    builder: (_) => SettingsPanel(
-                      settings: settings!,
-                      backups: backups!,
-                      files: NativeFileDialogs(),
-                      connectionPanel: connections == null
-                          ? null
-                          : ConnectionPanel(
-                              service: connections!,
-                              connected: engine != null,
-                              onConnected: (result) async {
-                                Navigator.of(context).pop();
-                                await onConnected?.call(result);
-                              },
-                              onDisconnected: () async {
-                                Navigator.of(context).pop();
-                                await onDisconnected?.call();
-                              },
-                            ),
-                    ),
-                  ).then((_) {
-                    if (context.mounted) DaySound.play(context, UiSound.close);
-                  });
-                },
+              : () => openSettings(context),
         ),
       ),
     ),
   );
+
+  void openSettings(BuildContext context) {
+    if (settings == null || backups == null) return;
+    DaySound.play(context, UiSound.open);
+    showDialog<void>(
+      context: context,
+      builder: (_) => SettingsPanel(
+        settings: settings!,
+        backups: backups!,
+        files: NativeFileDialogs(),
+        connectionPanel: connections == null
+            ? null
+            : ConnectionPanel(
+                service: connections!,
+                engine: engine,
+                server: server,
+                lost: connectionLost,
+                onConnected: (result) async {
+                  Navigator.of(context).pop();
+                  await onConnected?.call(result);
+                  if (context.mounted) {
+                    DayToast.show(
+                      context,
+                      'Подключено к ${serverName(result.secret.endpoint)}. Задачи синхронизируются',
+                    );
+                  }
+                },
+                onDisconnected: () async {
+                  Navigator.of(context).pop();
+                  await onDisconnected?.call();
+                },
+              ),
+      ),
+    ).then((_) {
+      if (context.mounted) DaySound.play(context, UiSound.close);
+    });
+  }
 }

@@ -544,6 +544,9 @@ class _TaskHomeState extends State<TaskHome> {
 
   /// The quiet states are not shown; only offline, sign-in and conflict
   /// messages surface, since they need the user.
+  /// Connected to a server: the lists panel always shows how sync is doing.
+  bool get connected => widget.syncLabel != 'Сохранено на устройстве';
+
   bool get syncAlert => !const {
     'Сохранено на устройстве',
     'Всё синхронизировано',
@@ -638,6 +641,49 @@ class _TaskHomeState extends State<TaskHome> {
               ),
             ),
           ),
+          // Sync needs a look (syncing, offline, key lost): a cloud on the
+          // right says so without opening the drawer.
+          if (connected && widget.syncLabel != 'Всё синхронизировано') ...[
+            const Spacer(),
+            Transform.translate(
+              offset: const Offset(2, 0),
+              child: FluidSurface(
+                pressScale: .9,
+                enabled: widget.onSync != null,
+                child: Tooltip(
+                  message: widget.syncLabel,
+                  child: Semantics(
+                    button: true,
+                    label: widget.syncLabel,
+                    child: InkResponse(
+                      key: const Key('phone-sync'),
+                      onTap: widget.onSync,
+                      radius: 24,
+                      child: SizedBox.square(
+                        dimension: 48,
+                        child: Center(
+                          child: Container(
+                            width: 44,
+                            height: 44,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: colors.screen,
+                              shape: BoxShape.circle,
+                            ),
+                            child: DayIcon(
+                              DayGlyph.cloud,
+                              size: 20,
+                              color: syncAlert ? colors.overdue : colors.muted,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -690,7 +736,7 @@ class _TaskHomeState extends State<TaskHome> {
                         controller: c,
                         onNavigate: () => Navigator.pop(context),
                         onSettings: widget.onSettings,
-                        status: syncAlert ? syncStatus() : null,
+                        status: connected ? syncStatus() : null,
                       ),
                     ),
               body: desktop
@@ -714,7 +760,7 @@ class _TaskHomeState extends State<TaskHome> {
                                   child: ListPanel(
                                     controller: c,
                                     onSettings: widget.onSettings,
-                                    status: syncAlert ? syncStatus() : null,
+                                    status: connected ? syncStatus() : null,
                                   ),
                                 ),
                               ),

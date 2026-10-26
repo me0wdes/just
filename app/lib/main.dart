@@ -64,6 +64,8 @@ Future<void> main(List<String> args) async {
       directory: directory,
       settings: settings,
       secret: secret,
+      // Saved, but unreadable now: say so instead of looking local.
+      connectionLost: profile != null && profile.isNotEmpty && secret == null,
       deviceId: deviceId,
     ),
   );

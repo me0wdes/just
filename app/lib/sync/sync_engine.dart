@@ -35,7 +35,17 @@ class TimerScheduler implements Scheduler {
   double jitter() => Random().nextDouble();
 }
 
-enum SyncState { localSaved, syncing, synced, offline, authRequired, rejected }
+enum SyncState {
+  localSaved('Сохранено на устройстве'),
+  syncing('Синхронизация…'),
+  synced('Всё синхронизировано'),
+  offline('Без сети · задачи сохранены'),
+  authRequired('Проверьте подключение в настройках'),
+  rejected('Есть конфликт · локальная копия сохранена');
+
+  final String label;
+  const SyncState(this.label);
+}
 
 class SyncEngine extends ChangeNotifier {
   final TaskRepository repository;

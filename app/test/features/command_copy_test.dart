@@ -41,7 +41,6 @@ void main() {
           body: SingleChildScrollView(
             child: ConnectionPanel(
               service: service,
-              connected: false,
               onConnected: (_) async {},
               onDisconnected: () async {},
             ),
