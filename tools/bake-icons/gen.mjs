@@ -51,6 +51,9 @@ for (const [key, v] of Object.entries(baked)) {
   });
   dart += `  '${key}': _IconMotion(\n    box: [${vb.map(r)}],\n    start: ${start.length},\n    stop: ${stop.length},\n    loop: ${loop ? Math.round(loop * fps) : 0},\n    parts: [\n${parts.join(',\n')},\n    ],\n  ),\n`;
 }
+// Quiet volume: ItsHover has only the loud speaker, so this one keeps its
+// speaker with a single wave and stays still.
+dart += `  'volume-low': _IconMotion(\n    box: [0,0,24,24],\n    start: 0,\n    stop: 0,\n    loop: 0,\n    parts: [\n${['M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z', 'M16 9a5 5 0 0 1 0 6'].map(d => `    _Part("${d}", fill: false, stroke: true, width: 1.75, rest: [1,0,0,1,0,0,1,0,1])`).join(',\n')},\n    ],\n  ),\n`;
 // The hamburger has no ItsHover component; it stays still.
 dart += `  'menu-icon': _IconMotion(\n    box: [0,0,24,24],\n    start: 0,\n    stop: 0,\n    loop: 0,\n    parts: [\n${['M4 6h16', 'M4 12h16', 'M4 18h16'].map(d => `    _Part("${d}", fill: false, stroke: true, width: 1.75, rest: [1,0,0,1,0,0,1,0,1])`).join(',\n')},\n    ],\n  ),\n};\n`;
 fs.writeFileSync(`${app}/lib/theme/icon_motion.g.dart`, dart);

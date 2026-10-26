@@ -193,7 +193,7 @@ class _ConnectionPanelState extends State<ConnectionPanel> {
         const SizedBox(height: 8),
         DaySegments(
           index: serverMode ? 1 : 0,
-          labels: const ['На этом устройстве', 'Свой сервер'],
+          labels: const ['На устройстве', 'Свой сервер'],
           onChanged: busy ? (_) {} : pickMode,
         ),
         const SizedBox(height: 10),
@@ -226,8 +226,7 @@ class _ConnectionPanelState extends State<ConnectionPanel> {
           const _Step(
             number: 1,
             title: 'Зайдите на сервер',
-            text: 'Откройте терминал (на Windows это PowerShell) и введите команду ниже, подставив адрес сервера. Адрес и пароль пришлёт хостинг после покупки.',
-            child: _CommandBox(command: 'ssh root@адрес-сервера'),
+            text: 'Откройте терминал (на Windows это PowerShell) и подключитесь к серверу по адресу и паролю, которые прислал хостинг.',
           ),
           const _Step(
             number: 2,
@@ -335,6 +334,8 @@ const installCommand =
   }
 }
 
+/// A command to copy: the text on top, «Скопировать» under it, so a long
+/// line keeps its width on a phone too.
 class _CommandBox extends StatelessWidget {
   final String command;
   const _CommandBox({required this.command});
@@ -342,24 +343,21 @@ class _CommandBox extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = DayColors.of(context);
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
       decoration: BoxDecoration(
         color: c.input,
         borderRadius: BorderRadius.circular(10),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: SelectableText(
-              command,
-              style: TextStyle(
-                fontFamily: 'monospace',
-                fontSize: 12,
-                height: 1.4,
-                color: c.text,
-              ),
-            ),
+          SelectableText(
+            command,
+            style: Theme.of(context).textTheme.bodyMedium!
+                .copyWith(fontSize: 13, height: 18 / 13, color: c.text),
           ),
+          const SizedBox(height: 8),
           DayButton(
             kind: DayButtonKind.secondary,
             onPressed: () {

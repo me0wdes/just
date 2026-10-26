@@ -14,6 +14,7 @@ import 'settings_controller.dart';
 import 'import_preview.dart';
 import '../../theme/fluid_surface.dart';
 import '../../platform/update_service.dart';
+import '../../theme/controls.dart';
 
 class SettingsPanel extends StatefulWidget {
   final SettingsController settings;
@@ -134,17 +135,46 @@ class _SettingsPanelState extends State<SettingsPanel> {
                   shrinkWrap: true,
                   padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
                   children: [
+                    // Figma «Настройки»: three buttons on a computer, a
+                    // dropdown on a phone, where they would not fit.
                     section('Оформление', [
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: DaySegments(
-                          index: modes.indexOf(s.themeMode),
-                          labels: const ['Как в системе', 'Светлая', 'Тёмная'],
-                          onChanged: (i) => s.setTheme(modes[i]),
+                      if (MediaQuery.sizeOf(context).width < 600)
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'Тема',
+                                style: Theme.of(context).textTheme.bodyLarge,
+                              ),
+                            ),
+                            SizedBox(
+                              width: 150,
+                              child: DaySelect<ThemeMode>(
+                                value: s.themeMode,
+                                items: [
+                                  for (final (i, label) in const [
+                                    'Системная',
+                                    'Светлая',
+                                    'Тёмная',
+                                  ].indexed)
+                                    DaySelectItem(modes[i], label),
+                                ],
+                                onChanged: s.setTheme,
+                              ),
+                            ),
+                          ],
+                        )
+                      else
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: DaySegments(
+                            index: modes.indexOf(s.themeMode),
+                            labels: const ['Системная', 'Светлая', 'Тёмная'],
+                            onChanged: (i) => s.setTheme(modes[i]),
+                          ),
                         ),
-                      ),
                     ]),
-                    section('Звук', [
+                    section('Взаимодействие', [
                       FluidSwitchTile(
                         contentPadding: EdgeInsets.zero,
                         title: const Text('Звуки интерфейса'),
@@ -152,22 +182,39 @@ class _SettingsPanelState extends State<SettingsPanel> {
                         onChanged: s.setSound,
                       ),
                       if (s.completionSoundEnabled)
+                        // Figma «Громкость / Иконки»: quiet and loud at the ends.
                         Row(
                           children: [
-                            Text(
-                              'Громкость',
-                              style: TextStyle(color: colors.muted),
+                            DayIcon(
+                              DayGlyph.volumeLow,
+                              size: 20,
+                              color: colors.muted,
                             ),
                             Expanded(
-                              child: Slider(
-                                value: s.volume,
-                                onChanged: s.setVolume,
-                                // Let the user hear the level they picked.
-                                onChangeEnd: (_) =>
-                                    DaySound.play(context, UiSound.complete),
-                                label: 'Громкость',
-                                divisions: 20,
+                              // Clean track as in Figma: no tick marks, icons
+                              // 12 px from its ends.
+                              child: SliderTheme(
+                                data: SliderTheme.of(context).copyWith(
+                                  tickMarkShape: SliderTickMarkShape.noTickMark,
+                                ),
+                                child: Slider(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                  ),
+                                  value: s.volume,
+                                  onChanged: s.setVolume,
+                                  // Let the user hear the level they picked.
+                                  onChangeEnd: (_) =>
+                                      DaySound.play(context, UiSound.complete),
+                                  label: 'Громкость',
+                                  divisions: 20,
+                                ),
                               ),
+                            ),
+                            DayIcon(
+                              DayGlyph.volumeHigh,
+                              size: 20,
+                              color: colors.muted,
                             ),
                           ],
                         ),
