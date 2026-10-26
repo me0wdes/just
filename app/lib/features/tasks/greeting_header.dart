@@ -3,30 +3,38 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
-import '../../theme/app_theme.dart';
-import '../../theme/motion_tokens.dart';
-
 /// A FLOW preset: four stops and the drift speed from the gradient export.
 @immutable
 class FlowPalette {
   final List<Color> stops;
   final double speed;
 
-  /// The export's "type": soft FLOW blobs or aurora ribbons.
-  final bool aurora;
-  const FlowPalette(this.stops, {this.speed = 26, this.aurora = false});
+  /// The export's "type": soft FLOW blobs, aurora ribbons or a sky.
+  final bool aurora, sky;
+  const FlowPalette(
+    this.stops, {
+    this.speed = 26,
+    this.aurora = false,
+    this.sky = false,
+  });
   static const roseGold = FlowPalette([
     Color(0xfffff4e8),
     Color(0xfffbc9ac),
     Color(0xffe79ba7),
     Color(0xff8e5a74),
   ]);
-  static const solarFlare = FlowPalette([
-    Color(0xfffff6de),
-    Color(0xffffc24b),
-    Color(0xfff4664d),
-    Color(0xff8a2e5e),
-  ], speed: 28);
+
+  /// «Blue sky», sky type: deep blue above, misted at the horizon.
+  static const blueSky = FlowPalette(
+    [
+      Color(0xffe6f2ff),
+      Color(0xffb3d9ff),
+      Color(0xff80b3ff),
+      Color(0xff6699e6),
+    ],
+    speed: 22,
+    sky: true,
+  );
 
   /// «Northern lights», aurora type.
   static const night = FlowPalette(
@@ -40,11 +48,11 @@ class FlowPalette {
     aurora: true,
   );
 
-  /// Morning 04–12 Rose gold, day 12–19 Solar flare, night 19–04.
+  /// Morning 04–12 Rose gold, day 12–19 Blue sky, night 19–04.
   static FlowPalette forHour(int hour) => hour >= 4 && hour < 12
       ? roseGold
       : hour >= 12 && hour < 19
-      ? solarFlare
+      ? blueSky
       : night;
 }
 
@@ -165,7 +173,14 @@ class _RoseGoldPainter extends CustomPainter {
           ..setFloat(i++, c.g)
           ..setFloat(i++, c.b);
       }
-      program.setFloat(i, palette.aurora ? 1 : 0);
+      program.setFloat(
+        i,
+        palette.aurora
+            ? 1
+            : palette.sky
+            ? 2
+            : 0,
+      );
       canvas.drawRect(rect, Paint()..shader = program);
     } else {
       canvas.drawRect(
@@ -184,155 +199,4 @@ class _RoseGoldPainter extends CustomPainter {
   @override
   bool shouldRepaint(_RoseGoldPainter old) =>
       old.shader != shader || old.clock != clock || old.palette != palette;
-}
-
-/// The strip across the top of the window, like Unity Hub's announcement
-/// banner: the live Rose gold field, the greeting in bold and a quiet line
-/// about the day.
-/// Figma «Шапка экрана»: the clean live field, with the title and date on
-/// a small card (screen colour, radius 12, padding 20).
-class ScreenHeader extends StatelessWidget {
-  final String title, subtitle;
-  final Widget? top;
-  final bool phone;
-  final DateTime? now;
-  const ScreenHeader({
-    super.key,
-    required this.title,
-    required this.subtitle,
-    this.top,
-    this.phone = false,
-    this.now,
-  });
-  FlowPalette get palette => FlowPalette.forHour((now ?? DateTime.now()).hour);
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = DayColors.of(context);
-    final card = _Entrance(
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: colors.screen,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        // AnimatedSize with a zero duration re-dirties its own layout in
-        // Flutter, so reduced motion skips it altogether.
-        child: _maybeAnimatedSize(
-          context,
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              AnimatedSwitcher(
-                duration: MotionTokens.duration(context, MotionTokens.moderate),
-                transitionBuilder: (child, animation) => FadeTransition(
-                  opacity: animation,
-                  child: SlideTransition(
-                    position: Tween(
-                      begin: const Offset(0, .15),
-                      end: Offset.zero,
-                    ).animate(animation),
-                    child: child,
-                  ),
-                ),
-                layoutBuilder: (current, previous) => Stack(
-                  alignment: Alignment.bottomLeft,
-                  children: [...previous, ?current],
-                ),
-                child: Text(
-                  title,
-                  key: ValueKey(title),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleLarge!.copyWith(
-                    color: colors.text,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                subtitle,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodyMedium!.copyWith(
-                  color: colors.muted,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-    return Semantics(
-      container: true,
-      child: Stack(
-        children: [
-          Positioned.fill(
-            child: ExcludeSemantics(child: RoseGoldField(palette: palette)),
-          ),
-          Padding(
-            // On a phone the field runs under the status bar.
-            padding: phone
-                ? EdgeInsets.fromLTRB(
-                    20,
-                    (top == null ? 20 : 10) + MediaQuery.paddingOf(context).top,
-                    20,
-                    20,
-                  )
-                // Figma: header 162, card 40 from the top and 34 from the bottom.
-                : const EdgeInsets.fromLTRB(40, 40, 40, 34),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                minWidth: double.infinity,
-                minHeight: 0,
-              ),
-              // Figma: the card hugs on desktop and fills the width on a phone.
-              child: Column(
-                crossAxisAlignment: phone
-                    ? CrossAxisAlignment.stretch
-                    : CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // The bar is 48px for touch; its icons stay where the
-                  // 28px row in Figma put them, and the card does too.
-                  if (top != null) ...[top!, const SizedBox(height: 6)],
-                  Flexible(child: card),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Copy rises into place once, when the window opens.
-Widget _maybeAnimatedSize(BuildContext context, Widget child) =>
-    MediaQuery.disableAnimationsOf(context)
-    ? child
-    : AnimatedSize(
-        duration: MotionTokens.moderate,
-        curve: MotionTokens.easeOut,
-        alignment: Alignment.topLeft,
-        child: child,
-      );
-
-class _Entrance extends StatelessWidget {
-  final Widget child;
-  const _Entrance({required this.child});
-  @override
-  Widget build(BuildContext context) => TweenAnimationBuilder<double>(
-    tween: Tween(begin: 0, end: 1),
-    duration: MotionTokens.duration(context, const Duration(milliseconds: 520)),
-    curve: MotionTokens.easeOut,
-    child: child,
-    builder: (context, t, child) => Opacity(
-      opacity: t,
-      child: Transform.translate(offset: Offset(0, 6 * (1 - t)), child: child),
-    ),
-  );
 }

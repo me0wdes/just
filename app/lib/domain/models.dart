@@ -158,13 +158,25 @@ class TaskQuery {
   final TaskView view;
   final String? listId;
   final LocalDate today;
+
+  /// A day picked in the week calendar; null is today.
+  final LocalDate? day;
   final bool includeCompleted;
   const TaskQuery({
     required this.today,
     this.view = TaskView.today,
     this.listId,
+    this.day,
     this.includeCompleted = false,
   });
+
+  /// Today holds what is due, overdue or planned for it; any other day only
+  /// what is due or planned on that date.
+  static bool onDay(TaskItem task, LocalDate day, LocalDate today) =>
+      day == today
+      ? (task.dueDate != null && task.dueDate!.compareTo(today) <= 0) ||
+            task.plannedForDate == today
+      : task.dueDate == day || task.plannedForDate == day;
   bool matches(TaskItem task) {
     if (task.deleted || (!includeCompleted && task.completed)) return false;
     // The inbox entry now reads «Без списка»: tasks with no list at all.
@@ -174,9 +186,7 @@ class TaskQuery {
             : task.listIds.contains(listId))) {
       return false;
     }
-    if (view == TaskView.today &&
-        !((task.dueDate != null && task.dueDate!.compareTo(today) <= 0) ||
-            task.plannedForDate == today)) {
+    if (view == TaskView.today && !onDay(task, day ?? today, today)) {
       return false;
     }
     return true;

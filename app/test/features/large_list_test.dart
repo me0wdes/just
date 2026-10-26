@@ -10,9 +10,7 @@ import 'package:day_planner/features/tasks/task_row.dart';
 import 'package:day_planner/platform/feedback_service.dart';
 
 void main() {
-  testWidgets('1000 real tasks build only visible rows', (
-    tester,
-  ) async {
+  testWidgets('1000 real tasks build only visible rows', (tester) async {
     final db = AppDatabase.memory(workspaceId: 'local');
     final repo = SqliteTaskRepository(db);
     await repo.applySyncResponse(

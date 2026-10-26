@@ -15,43 +15,12 @@ import '../../theme/day_sound.dart';
 import '../../theme/fluid_surface.dart';
 import '../../theme/motion_tokens.dart';
 import '../../theme/segments.dart';
-import 'greeting_header.dart';
 import 'list_panel.dart';
 import 'task_composer.dart';
 import 'task_controller.dart';
 import 'task_detail_panel.dart';
 import 'task_row.dart';
-
-const _weekdays = [
-  'понедельник',
-  'вторник',
-  'среда',
-  'четверг',
-  'пятница',
-  'суббота',
-  'воскресенье',
-];
-const _months = [
-  'января',
-  'февраля',
-  'марта',
-  'апреля',
-  'мая',
-  'июня',
-  'июля',
-  'августа',
-  'сентября',
-  'октября',
-  'ноября',
-  'декабря',
-];
-
-String _plural(int n, String one, String few, String many) {
-  final d = n % 10, h = n % 100;
-  if (d == 1 && h != 11) return one;
-  if (d >= 2 && d <= 4 && (h < 12 || h > 14)) return few;
-  return many;
-}
+import 'week_header.dart';
 
 final _mac = defaultTargetPlatform == TargetPlatform.macOS;
 
@@ -610,37 +579,17 @@ class _TaskHomeState extends State<TaskHome> {
     );
   }
 
-  /// What the open view holds, so «Сегодня» and «Все задачи» explain
-  /// themselves.
-  String viewHint() {
-    final open = c.tasks.where((t) => !t.completed).length;
-    final count = '$open ${_plural(open, 'задача', 'задачи', 'задач')}';
-    return switch (c.query.view) {
-      TaskView.today => dateLabel(),
-      TaskView.all => 'Все незавершённые, с любым сроком · $count',
-      TaskView.list when c.query.listId == inboxId =>
-        'Задачи без списка · $count',
-      TaskView.list => count,
-    };
-  }
-
-  String dateLabel() {
-    final d = c.query.today.utc;
-    final weekday = _weekdays[d.weekday - 1];
-    return '${weekday[0].toUpperCase()}${weekday.substring(1)}, '
-        '${d.day} ${_months[d.month - 1]}';
-  }
-
   /// The phone header's top row: lists on the left, more on the right.
   Widget phoneBar({bool onField = false}) {
     final colors = DayColors.of(context);
     final ink = onField ? const Color(0xff141414) : colors.text;
     // 48px touch targets; the icons are shifted out so they still line up
     // with the title card edge.
+    // Figma «Шапка»: only the lists button; settings and sync live in the
+    // drawer it opens.
     return SizedBox(
       height: 48,
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Transform.translate(
             offset: const Offset(-11, 0),
@@ -660,38 +609,6 @@ class _TaskHomeState extends State<TaskHome> {
                   ),
                 ),
               ),
-            ),
-          ),
-          Transform.translate(
-            offset: const Offset(11, 0),
-            child: PopupMenuButton<String>(
-              tooltip: 'Ещё',
-              position: PopupMenuPosition.under,
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 180),
-              style: IconButton.styleFrom(
-                minimumSize: const Size(48, 48),
-                padding: EdgeInsets.zero,
-              ),
-              onOpened: () => DaySound.play(context, UiSound.tap),
-              icon: DayIcon(DayGlyph.more, size: 26, color: ink),
-              onSelected: (action) => switch (action) {
-                'settings' => widget.onSettings?.call(),
-                _ => widget.onSync?.call(),
-              },
-              itemBuilder: (_) => [
-                if (widget.onSettings != null)
-                  const PopupMenuItem(
-                    value: 'settings',
-                    child: Text('Настройки'),
-                  ),
-                if (syncAlert)
-                  PopupMenuItem(
-                    value: 'sync',
-                    enabled: widget.onSync != null,
-                    child: Text(widget.syncLabel),
-                  ),
-              ],
             ),
           ),
         ],
@@ -727,10 +644,8 @@ class _TaskHomeState extends State<TaskHome> {
                 inline = constraints.maxWidth >= 1280;
             final selected = inline ? c.selected : null;
             final colors = DayColors.of(context);
-            final head = ScreenHeader(
-              now: c.clock(),
-              title: c.heading,
-              subtitle: viewHint(),
+            final head = WeekHeader(
+              controller: c,
               phone: !desktop,
               top: desktop ? null : phoneBar(onField: true),
             );
@@ -861,21 +776,14 @@ class _TaskHomeState extends State<TaskHome> {
                         if (keyboard)
                           SafeArea(bottom: false, child: phoneBarPadded())
                         else
-                          Padding(
-                            padding: EdgeInsets.fromLTRB(
-                              4,
-                              4 + MediaQuery.paddingOf(context).top,
-                              4,
-                              0,
+                          // Figma «Новые секции · телефон»: the field runs
+                          // under the status bar, edge to edge, and rounds
+                          // only its bottom (40).
+                          ClipRRect(
+                            borderRadius: const BorderRadius.vertical(
+                              bottom: Radius.circular(40),
                             ),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(24),
-                              child: MediaQuery.removePadding(
-                                context: context,
-                                removeTop: true,
-                                child: head,
-                              ),
-                            ),
+                            child: head,
                           ),
                         Expanded(
                           child: SafeArea(

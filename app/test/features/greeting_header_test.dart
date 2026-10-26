@@ -10,7 +10,7 @@ import 'package:day_planner/platform/feedback_service.dart';
 
 void main() {
   testWidgets(
-    'screen header above tasks stays readable at large text without motion',
+    'week header above tasks stays readable at large text without motion',
     (tester) async {
       final db = AppDatabase.memory(workspaceId: 'local');
       final c = TaskController(
@@ -35,9 +35,10 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.text('Понедельник, 19 октября'), findsOneWidget);
+      final island = find.text('Сегодня, 19 октября', findRichText: true);
+      expect(island, findsOneWidget);
       expect(
-        tester.getTopLeft(find.text('Сегодня').first).dy,
+        tester.getTopLeft(island).dy,
         lessThan(tester.getTopLeft(find.text('Активные')).dy),
       );
       expect(tester.takeException(), isNull);
@@ -50,8 +51,8 @@ void main() {
   test('header field follows the time of day', () {
     expect(FlowPalette.forHour(4), FlowPalette.roseGold);
     expect(FlowPalette.forHour(11), FlowPalette.roseGold);
-    expect(FlowPalette.forHour(12), FlowPalette.solarFlare);
-    expect(FlowPalette.forHour(18), FlowPalette.solarFlare);
+    expect(FlowPalette.forHour(12), FlowPalette.blueSky);
+    expect(FlowPalette.forHour(18), FlowPalette.blueSky);
     expect(FlowPalette.forHour(19), FlowPalette.night);
     expect(FlowPalette.forHour(3), FlowPalette.night);
   });

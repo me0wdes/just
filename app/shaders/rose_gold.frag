@@ -9,7 +9,8 @@ uniform vec3 uC0;
 uniform vec3 uC1;
 uniform vec3 uC2;
 uniform vec3 uC3;
-// 0 = FLOW (soft drifting blobs), 1 = aurora (glowing ribbons on a dark sky).
+// 0 = FLOW (soft drifting blobs), 1 = aurora (glowing ribbons on a dark sky),
+// 2 = sky (a day sky with slow haze).
 uniform float uMode;
 out vec4 fragColor;
 
@@ -45,7 +46,35 @@ vec3 aurora(vec2 uv, float t) {
   }
   return col;
 }
+float hash(vec2 p) { return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
+float vnoise(vec2 p) {
+  vec2 i=floor(p),f=fract(p);
+  vec2 u=f*f*(3.0-2.0*f);
+  return mix(mix(hash(i),hash(i+vec2(1.0,0.0)),u.x),mix(hash(i+vec2(0.0,1.0)),hash(i+vec2(1.0,1.0)),u.x),u.y);
+}
+float fbm(vec2 p) {
+  float v=0.0,a=.5;
+  for(int i=0;i<4;i++){v+=a*vnoise(p);p=p*2.03+vec2(1.7,9.2);a*=.5;}
+  return v;
+}
+// Sky: the four stops run from the horizon (lightest) up to the deep blue,
+// mixed in Oklab, with soft haze drifting sideways in the misted stop.
+vec3 sky(vec2 uv, float t) {
+  float h=clamp(uv.y+.05*sin(uv.x*2.2+t*.15),0.0,1.0);
+  vec3 lab=h<.333?mix(toLab(uC0),toLab(uC1),soft(h/.333))
+          :h<.666?mix(toLab(uC1),toLab(uC2),soft((h-.333)/.333))
+                 :mix(toLab(uC2),toLab(uC3),soft((h-.666)/.334));
+  vec2 q=vec2(uv.x*2.2+t*.05,uv.y*3.2);
+  float haze=smoothstep(.45,.85,fbm(q+vec2(fbm(q*.6+t*.03),0.0)*.8));
+  lab=mix(lab,toLab(uC0),haze*.45*(1.0-.35*uv.y));
+  return fromLab(lab);
+}
 void main() {
+  if (uMode > 1.5) {
+    vec2 uv=FlutterFragCoord().xy/max(uSize,vec2(1.0));
+    fragColor=vec4(sky(vec2(uv.x*uSize.x/max(uSize.y,1.0)*.35, 1.0-uv.y), uTime), 1.0);
+    return;
+  }
   if (uMode > .5) {
     vec2 uv=FlutterFragCoord().xy/max(uSize,vec2(1.0));
     fragColor=vec4(aurora(vec2(uv.x, 1.0-uv.y), uTime*1.6), 1.0);

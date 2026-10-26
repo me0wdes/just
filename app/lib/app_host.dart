@@ -339,6 +339,7 @@ class _DayHostState extends State<DayHost> with WidgetsBindingObserver {
         TaskQuery(
           view: controller.query.view,
           listId: controller.query.listId,
+          day: controller.query.day,
           today: LocalDate.today(),
           includeCompleted: true,
         ),

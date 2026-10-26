@@ -39,6 +39,33 @@ class TaskController extends ChangeNotifier {
 
   StreamSubscription<List<TaskItem>>? _tasks;
   StreamSubscription<List<TaskList>>? _lists;
+  StreamSubscription<List<TaskItem>>? _calendar;
+  List<TaskItem> calendar = [];
+
+  /// The day the «Сегодня» view shows.
+  LocalDate get day => query.day ?? today();
+
+  /// Open tasks on [date] in the current view (a list keeps its own).
+  int countOn(LocalDate date) => calendar.where((t) {
+    if (!TaskQuery.onDay(t, date, today())) return false;
+    if (query.view != TaskView.list) return true;
+    return query.listId == inboxId
+        ? t.listIds.isEmpty
+        : t.listIds.contains(query.listId);
+  }).length;
+
+  void selectDay(LocalDate date) {
+    selectedId = null;
+    setQuery(
+      TaskQuery(
+        view: TaskView.today,
+        today: today(),
+        day: date == today() ? null : date,
+        includeCompleted: true,
+      ),
+    );
+  }
+
   bool _disposed = false;
   TaskController(
     this.repository, {
@@ -48,6 +75,13 @@ class TaskController extends ChangeNotifier {
   }) : clock = clock ?? DateTime.now {
     query = TaskQuery(today: today(), includeCompleted: true);
     setQuery(query);
+    // Open tasks of every day, for the dots under the week calendar.
+    _calendar = repository
+        .watchTasks(TaskQuery(view: TaskView.all, today: today()))
+        .listen((value) {
+          calendar = value;
+          _notify();
+        }, onError: _onError);
     _lists = repository.watchLists().listen((value) {
       lists = value;
       _notify();
@@ -112,8 +146,8 @@ class TaskController extends ChangeNotifier {
             ? 1024
             : tasks.map((t) => t.position).reduce((a, b) => a > b ? a : b) +
                   1024,
-        // «Сегодня» = срок сегодня или просрочено, so a task added there is due today.
-        if (query.view == TaskView.today) 'dueDate': today().toString(),
+        // A task added in the day view is due on the day being shown.
+        if (query.view == TaskView.today) 'dueDate': day.toString(),
       },
     ),
   );
@@ -222,6 +256,7 @@ class TaskController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _calendar?.cancel();
     _disposed = true;
     _tasks?.cancel();
     _lists?.cancel();

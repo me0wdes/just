@@ -1,0 +1,35 @@
+{
+  "name": "Blue sky",
+  "type": "sky",
+  "profile": "sRGB",
+  "dividers": [
+    0.25,
+    0.5,
+    0.75
+  ],
+  "soften": 0,
+  "noise": 4,
+  "speed": 22,
+  "stops": [
+    {
+      "name": "MISTED SKY",
+      "hex": "#E6F2FF",
+      "position": 0.125
+    },
+    {
+      "name": "MISTED SKY",
+      "hex": "#B3D9FF",
+      "position": 0.375
+    },
+    {
+      "name": "SKY HAZE",
+      "hex": "#80B3FF",
+      "position": 0.625
+    },
+    {
+      "name": "RIVER INDIGO",
+      "hex": "#6699E6",
+      "position": 0.875
+    }
+  ]
+}

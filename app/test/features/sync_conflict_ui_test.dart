@@ -64,8 +64,8 @@ void main() {
       DayApp(controller: controller, engine: engine, backups: backups),
     );
     await tester.pumpAndSettle();
-    // On a phone-sized window the sync status lives in the «Ещё» menu.
-    await tester.tap(find.byTooltip('Ещё'));
+    // On a phone-sized window the sync status lives in the lists drawer.
+    await tester.tap(find.byTooltip('Списки'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Есть конфликт · локальная копия сохранена'));
     await tester.pumpAndSettle();

@@ -9,9 +9,7 @@ import 'package:day_planner/platform/feedback_service.dart';
 import 'package:day_planner/domain/models.dart';
 
 void main() {
-  testWidgets('Ctrl N focuses task entry', (
-    tester,
-  ) async {
+  testWidgets('Ctrl N focuses task entry', (tester) async {
     final db = AppDatabase.memory(workspaceId: 'local');
     final controller = TaskController(
       SqliteTaskRepository(db),

@@ -35,8 +35,9 @@ void main() {
         final font = FontLoader('Golos')
           ..addFont(rootBundle.load('assets/fonts/GolosText.ttf'));
         await tester.runAsync(font.load);
-        final serif = FontLoader('Instrument Serif')
-          ..addFont(rootBundle.load('assets/fonts/InstrumentSerif-Regular.ttf'));
+        final serif = FontLoader(
+          'Instrument Serif',
+        )..addFont(rootBundle.load('assets/fonts/InstrumentSerif-Regular.ttf'));
         await tester.runAsync(serif.load);
         final icons = FontLoader('MaterialIcons')
           ..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'));
@@ -45,7 +46,9 @@ void main() {
         final repo = SqliteTaskRepository(db);
         final today = LocalDate.parse('2026-10-19');
         await repo.execute(TaskCommand.createList(home, 'Дом', icon: 'home'));
-        await repo.execute(TaskCommand.createList(work, 'Работа', icon: 'work'));
+        await repo.execute(
+          TaskCommand.createList(work, 'Работа', icon: 'work'),
+        );
         final samples = [
           (
             'Разобрать заметки за неделю',
@@ -60,7 +63,7 @@ void main() {
             'Показать тёмную тему и звуки',
             '2026-10-20',
           ),
-          ('Погулять без телефона', home, '', null),
+          ('Погулять без телефона', home, '', '2026-10-27'),
           ('Выбрать книгу на вечер', inboxId, '', null),
         ];
         var position = 0;
@@ -152,8 +155,9 @@ void main() {
         final font = FontLoader('Golos')
           ..addFont(rootBundle.load('assets/fonts/GolosText.ttf'));
         await tester.runAsync(font.load);
-        final serif = FontLoader('Instrument Serif')
-          ..addFont(rootBundle.load('assets/fonts/InstrumentSerif-Regular.ttf'));
+        final serif = FontLoader(
+          'Instrument Serif',
+        )..addFont(rootBundle.load('assets/fonts/InstrumentSerif-Regular.ttf'));
         await tester.runAsync(serif.load);
         final key = GlobalKey();
         await tester.pumpWidget(
@@ -163,13 +167,7 @@ void main() {
             home: RepaintBoundary(
               key: key,
               child: Scaffold(
-                body: ScreenHeader(
-                  title: 'Сегодня',
-                  subtitle: 'Понедельник, 19 октября',
-                  phone: true,
-                  now: DateTime(2026, 10, 19, hour),
-                  top: const SizedBox(height: 28),
-                ),
+                body: RoseGoldField(palette: FlowPalette.forHour(hour)),
               ),
             ),
           ),
