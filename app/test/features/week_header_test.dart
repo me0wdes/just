@@ -1,4 +1,6 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:uuid/uuid.dart';
 import 'package:day_planner/data/app_database.dart';
@@ -176,6 +178,70 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Удалить'), findsOneWidget);
     expect(find.text('Выполнить'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    c.dispose();
+    await db.close();
+  });
+
+  testWidgets('«+N» darkens on hover and press and opens from the keyboard', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final db = AppDatabase.memory(workspaceId: 'local');
+    final repo = SqliteTaskRepository(db);
+    await repo.execute(
+      TaskCommand.createTask(
+        id: const Uuid().v4(),
+        title: 'На следующей неделе',
+        listId: inboxId,
+        fields: {'dueDate': '2026-10-27'},
+      ),
+    );
+    final c = TaskController(
+      repo,
+      feedback: const SilentCompletionFeedback(),
+      today: () => LocalDate.parse('2026-10-19'),
+    );
+    await tester.pumpWidget(MaterialApp(home: TaskHome(controller: c)));
+    await tester.pumpAndSettle();
+    Color fill() =>
+        ((tester
+                    .widget<AnimatedContainer>(
+                      find.byKey(const Key('more-pill')),
+                    )
+                    .decoration
+                as BoxDecoration)
+            .color)!;
+    final rest = fill();
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: Offset.zero);
+    await mouse.moveTo(tester.getCenter(find.byKey(const Key('more-pill'))));
+    await tester.pumpAndSettle();
+    final hover = fill();
+    expect(hover.a, greaterThan(rest.a));
+    final press = await tester.startGesture(
+      tester.getCenter(find.byKey(const Key('more-pill'))),
+    );
+    await tester.pumpAndSettle();
+    expect(fill().a, greaterThan(hover.a));
+    await press.cancel();
+    await mouse.removePointer();
+    await tester.pumpAndSettle();
+    // Tab reaches it; Enter opens the next week.
+    for (var i = 0; i < 40 && find.text('27').evaluate().isEmpty; i++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      final pill = tester.widget<AnimatedContainer>(
+        find.byKey(const Key('more-pill')),
+      );
+      if ((pill.decoration as BoxDecoration).border != null) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.pumpAndSettle();
+      }
+    }
+    expect(find.text('27'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
     c.dispose();
     await db.close();

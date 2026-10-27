@@ -503,35 +503,82 @@ class _Dots extends StatelessWidget {
 }
 
 /// «+N»: tasks next week; opens it.
-class _MorePill extends StatelessWidget {
+/// Figma «Ещё +N»: default, hover, pressed and focus states; the fill
+/// eases between them (Figma switch/off, pill/hover, pill/pressed).
+class _MorePill extends StatefulWidget {
   final int count;
   final VoidCallback onTap;
   const _MorePill({required this.count, required this.onTap});
   @override
+  State<_MorePill> createState() => _MorePillState();
+}
+
+class _MorePillState extends State<_MorePill> {
+  bool hovered = false, pressed = false, focused = false;
+  @override
   Widget build(BuildContext context) {
-    final c = DayColors.of(context);
-    final dark = Theme.of(context).brightness == Brightness.dark;
+    final reduce = MediaQuery.disableAnimationsOf(context);
+    // Light on the sky in either theme, as in Figma.
+    final fill = pressed
+        ? const Color(0x73ffffff)
+        : hovered
+        ? const Color(0x59ffffff)
+        : const Color(0x40ffffff);
     return Tooltip(
       message: 'Следующая неделя',
-      child: FluidSurface(
-        sound: null,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: onTap,
-          child: Container(
-            width: 38,
-            height: 77,
-            padding: const EdgeInsets.only(top: 29),
-            alignment: Alignment.topCenter,
-            decoration: BoxDecoration(
-              // Figma switch/off.
-              color: dark ? const Color(0x40ffffff) : const Color(0x33000000),
-              borderRadius: BorderRadius.circular(28),
-            ),
-            child: Text(
-              '+$count',
-              style: Theme.of(context).textTheme.bodyMedium!
-                  .copyWith(fontSize: 15, height: 18 / 15, color: c.text),
+      child: FocusableActionDetector(
+        mouseCursor: SystemMouseCursors.click,
+        onShowFocusHighlight: (v) => setState(() => focused = v),
+        actions: {
+          ActivateIntent: CallbackAction<ActivateIntent>(
+            onInvoke: (_) {
+              widget.onTap();
+              return null;
+            },
+          ),
+        },
+        child: MouseRegion(
+          onEnter: (_) => setState(() => hovered = true),
+          onExit: (_) => setState(() => hovered = false),
+          child: Semantics(
+            button: true,
+            label: '+${widget.count} на следующей неделе',
+            excludeSemantics: true,
+            child: FluidSurface(
+              sound: null,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTapDown: (_) => setState(() => pressed = true),
+                onTapUp: (_) => setState(() => pressed = false),
+                onTapCancel: () => setState(() => pressed = false),
+                onTap: widget.onTap,
+                child: AnimatedContainer(
+                  key: const Key('more-pill'),
+                  duration: reduce
+                      ? Duration.zero
+                      : Duration(milliseconds: pressed ? 100 : 150),
+                  curve: Curves.easeOut,
+                  width: 38,
+                  height: 77,
+                  padding: const EdgeInsets.only(top: 29),
+                  alignment: Alignment.topCenter,
+                  decoration: BoxDecoration(
+                    color: fill,
+                    borderRadius: BorderRadius.circular(28),
+                    border: focused
+                        ? Border.all(color: DayColors.dark.muted, width: 1.5)
+                        : null,
+                  ),
+                  child: Text(
+                    '+${widget.count}',
+                    style: Theme.of(context).textTheme.bodyMedium!.copyWith(
+                      fontSize: 15,
+                      height: 18 / 15,
+                      color: DayColors.dark.text,
+                    ),
+                  ),
+                ),
+              ),
             ),
           ),
         ),
