@@ -14,9 +14,11 @@ class Handle implements CancelHandle {
 class TestScheduler implements Scheduler {
   final delays = <Duration>[];
   final handles = <Handle>[];
+  final callbacks = <void Function()>[];
   @override
   CancelHandle schedule(Duration delay, void Function() callback) {
     delays.add(delay);
+    callbacks.add(callback);
     final handle = Handle();
     handles.add(handle);
     return handle;
@@ -39,7 +41,50 @@ class FailureTransport implements SyncTransport {
   }
 }
 
+class EmptyTransport implements SyncTransport {
+  int calls = 0;
+  @override
+  Future<SyncResponse> exchange(SyncRequest request) async {
+    calls++;
+    return SyncResponse(
+      workspaceId: 'remote',
+      acknowledgements: [],
+      changes: [],
+      nextCursor: 0,
+      hasMore: false,
+    );
+  }
+}
+
 void main() {
+  test(
+    'in sync, the next pass comes in 3 seconds without a status flash',
+    () async {
+      final db = AppDatabase.memory(workspaceId: 'local');
+      final scheduler = TestScheduler(), transport = EmptyTransport();
+      final engine = SyncEngine(
+        SqliteTaskRepository(db),
+        transport,
+        deviceId: 'id',
+        scheduler: scheduler,
+      );
+      try {
+        engine.setForeground(true);
+        await engine.syncNow();
+        expect(engine.state, SyncState.synced);
+        expect(scheduler.delays.last, const Duration(seconds: 3));
+        final states = <SyncState>[];
+        engine.addListener(() => states.add(engine.state));
+        scheduler.callbacks.last();
+        await engine.syncNow();
+        expect(transport.calls, 2);
+        expect(states, isNot(contains(SyncState.syncing)));
+      } finally {
+        engine.dispose();
+        await db.close();
+      }
+    },
+  );
   test(
     'foreground network retry stays at least 2 seconds and stops in background',
     () async {

@@ -108,6 +108,38 @@ void main() {
     await db.close();
   });
 
+  testWidgets('on a phone a swipe turns the day within the two weeks', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(375, 812);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final db = AppDatabase.memory(workspaceId: 'local');
+    final repo = SqliteTaskRepository(db);
+    final c = TaskController(
+      repo,
+      feedback: const SilentCompletionFeedback(),
+      today: () => LocalDate.parse('2026-10-19'),
+    );
+    await tester.pumpWidget(MaterialApp(home: TaskHome(controller: c)));
+    await tester.pumpAndSettle();
+    Future<void> swipe(double dx) async {
+      await tester.fling(find.text('Здесь пока тихо'), Offset(dx, 0), 1500);
+      await tester.pumpAndSettle();
+    }
+
+    // Monday: nothing before it in the header, so back stays put.
+    await swipe(200);
+    expect(c.day.toString(), '2026-10-19');
+    await swipe(-200);
+    expect(c.day.toString(), '2026-10-20');
+    await swipe(200);
+    expect(c.day.toString(), '2026-10-19');
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+    c.dispose();
+    await db.close();
+  });
   testWidgets('picking a day in «Все задачи» filters without leaving it', (
     tester,
   ) async {

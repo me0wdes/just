@@ -70,14 +70,18 @@ class SyncEngine extends ChangeNotifier {
     if (!_disposed) notifyListeners();
   }
 
-  Future<void> syncNow() {
+  Future<void> syncNow() => _sync(quiet: false);
+
+  /// Timer passes come quietly: while everything is in sync, the status
+  /// stays put instead of flashing «Синхронизация…» every few seconds.
+  Future<void> _sync({required bool quiet}) {
     if (_disposed) return Future.value();
-    return _running ??= _exchange().whenComplete(() => _running = null);
+    return _running ??= _exchange(quiet).whenComplete(() => _running = null);
   }
 
-  Future<void> _exchange() async {
+  Future<void> _exchange(bool quiet) async {
     _timer?.cancel();
-    _state(SyncState.syncing);
+    if (!quiet || state != SyncState.synced) _state(SyncState.syncing);
     var rejected = false;
     try {
       for (var iteration = 0; iteration < 10000; iteration++) {
@@ -145,7 +149,8 @@ class SyncEngine extends ChangeNotifier {
                 ? SyncState.rejected
                 : SyncState.synced,
           );
-          _schedule(const Duration(seconds: 15));
+          // Often enough that a task added on another device shows up almost at once.
+          _schedule(const Duration(seconds: 3));
           return;
         }
       }
@@ -172,7 +177,7 @@ class SyncEngine extends ChangeNotifier {
   void _schedule(Duration delay) {
     _timer?.cancel();
     if (_foreground && !_disposed) {
-      _timer = scheduler.schedule(delay, () => unawaited(syncNow()));
+      _timer = scheduler.schedule(delay, () => unawaited(_sync(quiet: true)));
     }
   }
 

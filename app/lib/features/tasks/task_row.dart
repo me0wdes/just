@@ -68,7 +68,7 @@ class TaskRow extends StatefulWidget {
 }
 
 class _TaskRowState extends State<TaskRow> {
-  bool hovered = false;
+  bool hovered = false, pressed = false;
   Timer? _due;
 
   @override
@@ -114,101 +114,113 @@ class _TaskRowState extends State<TaskRow> {
     return MouseRegion(
       onEnter: (_) => setState(() => hovered = true),
       onExit: (_) => setState(() => hovered = false),
+      // iOS-like press: the ink highlight starts after a short hold and
+      // drops when the finger scrolls, so a scroll never dents a card; it
+      // sinks quickly and settles back slower.
       child: FluidSurface(
-        pressScale: .992,
-        child: AnimatedContainer(
-          duration: MotionTokens.duration(context, MotionTokens.fast),
-          clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(
-            // Hover only tints the fill; the 1px border never changes.
-            color: widget.selected
-                ? c.track
-                : hovered
-                ? c.hover
-                : c.card,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: c.border),
+        pressScale: 1,
+        child: AnimatedScale(
+          scale: pressed ? .97 : 1,
+          duration: MotionTokens.duration(
+            context,
+            pressed ? const Duration(milliseconds: 120) : MotionTokens.panel,
           ),
-          child: Material(
-            type: MaterialType.transparency,
-            child: InkWell(
-              onTap: widget.onOpen,
-              onSecondaryTapUp: widget.onMenu == null
-                  ? null
-                  : (d) => widget.onMenu!(d.globalPosition),
-              onLongPress: widget.onMenu == null || !widget.longPressMenu
-                  ? null
-                  : () {
-                      final box = context.findRenderObject() as RenderBox;
-                      widget.onMenu!(
-                        box.localToGlobal(box.size.center(Offset.zero)),
-                      );
-                    },
-              hoverColor: Colors.transparent,
-              focusColor: c.track,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(minHeight: 68),
-                child: Padding(
-                  padding: const EdgeInsets.only(left: 4, right: 4),
-                  child: Row(
-                    children: [
-                      Semantics(
-                        checked: task.completed,
-                        label: task.completed
-                            ? 'Вернуть задачу'
-                            : 'Выполнить задачу',
-                        child: FluidSurface(
-                          sound: null,
-                          pressScale: .86,
-                          child: Tooltip(
-                            message: task.completed ? 'Вернуть' : 'Выполнить',
-                            child: InkResponse(
-                              onTap: widget.onToggle,
-                              radius: 20,
-                              hoverColor: Colors.transparent,
-                              highlightColor: Colors.transparent,
-                              child: SizedBox(
-                                width: 44,
-                                height: 44,
-                                child: Center(
-                                  child: CheckCircle(checked: task.completed),
+          curve: MotionTokens.easeOut,
+          child: AnimatedContainer(
+            duration: MotionTokens.duration(context, MotionTokens.fast),
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              // Hover only tints the fill; the 1px border never changes.
+              color: widget.selected
+                  ? c.track
+                  : hovered || pressed
+                  ? c.hover
+                  : c.card,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: c.border),
+            ),
+            child: Material(
+              type: MaterialType.transparency,
+              child: InkWell(
+                onTap: widget.onOpen,
+                onHighlightChanged: (on) => setState(() => pressed = on),
+                onSecondaryTapUp: widget.onMenu == null
+                    ? null
+                    : (d) => widget.onMenu!(d.globalPosition),
+                onLongPress: widget.onMenu == null || !widget.longPressMenu
+                    ? null
+                    : () {
+                        final box = context.findRenderObject() as RenderBox;
+                        widget.onMenu!(
+                          box.localToGlobal(box.size.center(Offset.zero)),
+                        );
+                      },
+                hoverColor: Colors.transparent,
+                focusColor: c.track,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 68),
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 4, right: 4),
+                    child: Row(
+                      children: [
+                        Semantics(
+                          checked: task.completed,
+                          label: task.completed
+                              ? 'Вернуть задачу'
+                              : 'Выполнить задачу',
+                          child: FluidSurface(
+                            sound: null,
+                            pressScale: .86,
+                            child: Tooltip(
+                              message: task.completed ? 'Вернуть' : 'Выполнить',
+                              child: InkResponse(
+                                onTap: widget.onToggle,
+                                radius: 20,
+                                hoverColor: Colors.transparent,
+                                highlightColor: Colors.transparent,
+                                child: SizedBox(
+                                  width: 44,
+                                  height: 44,
+                                  child: Center(
+                                    child: CheckCircle(checked: task.completed),
+                                  ),
                                 ),
                               ),
                             ),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Strikethrough(
-                                done: task.completed,
-                                color: c.text,
-                                child: Text(
-                                  task.title,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: theme.textTheme.bodyLarge!.copyWith(
-                                    color: c.text,
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Strikethrough(
+                                  done: task.completed,
+                                  color: c.text,
+                                  child: Text(
+                                    task.title,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: theme.textTheme.bodyLarge!.copyWith(
+                                      color: c.text,
+                                    ),
                                   ),
                                 ),
-                              ),
-                              if (meta.isNotEmpty)
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 2),
-                                  child: Row(children: meta),
-                                ),
-                            ],
+                                if (meta.isNotEmpty)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 2),
+                                    child: Row(children: meta),
+                                  ),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                    ],
+                        const SizedBox(width: 12),
+                      ],
+                    ),
                   ),
                 ),
               ),

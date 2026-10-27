@@ -264,7 +264,8 @@ class _TaskHomeState extends State<TaskHome> {
     return ReorderableListView.builder(
       scrollController: scroll,
       buildDefaultDragHandles: false,
-      padding: EdgeInsets.zero,
+      // The last card can scroll clear of the fade.
+      padding: const EdgeInsets.only(bottom: _fade),
       itemCount: items.length,
       // The dragged card lifts with a soft shadow cut to its own shape;
       // the item's 8px bottom gap stays outside the shadow.
@@ -503,28 +504,47 @@ class _TaskHomeState extends State<TaskHome> {
           ),
           const SizedBox(height: 16),
           Expanded(
-            child: AnimatedSwitcher(
-              duration: MotionTokens.duration(context, MotionTokens.reflow),
-              switchInCurve: MotionTokens.easeOut,
-              transitionBuilder: (child, animation) => FadeTransition(
-                opacity: animation,
-                child: SlideTransition(
-                  position: Tween(
-                    begin: const Offset(0, .02),
-                    end: Offset.zero,
-                  ).animate(animation),
-                  child: child,
+            child: GestureDetector(
+              // Phone «Сегодня»: a swipe turns the day, the way the week
+              // above would with a tap.
+              onHorizontalDragEnd: !desktop && c.query.view == TaskView.today
+                  ? swipeDay
+                  : null,
+              child: ShaderMask(
+                // Cards fade out above the field instead of being cut off.
+                blendMode: BlendMode.dstIn,
+                shaderCallback: (rect) => LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: const [Colors.black, Colors.transparent],
+                  stops: [1 - _fade / rect.height, 1],
+                ).createShader(rect),
+                child: AnimatedSwitcher(
+                  duration: MotionTokens.duration(context, MotionTokens.reflow),
+                  switchInCurve: MotionTokens.easeOut,
+                  transitionBuilder: (child, animation) => FadeTransition(
+                    opacity: animation,
+                    child: SlideTransition(
+                      position: Tween(
+                        begin: c.day == swipedTo
+                            ? Offset(swiped * .06, 0)
+                            : const Offset(0, .02),
+                        end: Offset.zero,
+                      ).animate(animation),
+                      child: child,
+                    ),
+                  ),
+                  child: KeyedSubtree(
+                    key: ValueKey(
+                      '${c.query.view}-${c.query.listId}-${c.query.day}-$showCompleted',
+                    ),
+                    child: taskList(active, completed, desktop, inline),
+                  ),
                 ),
-              ),
-              child: KeyedSubtree(
-                key: ValueKey(
-                  '${c.query.view}-${c.query.listId}-$showCompleted',
-                ),
-                child: taskList(active, completed, desktop, inline),
               ),
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 8),
           TaskComposer(
             focusNode: composer,
             onAdd: (text) async {
@@ -535,6 +555,32 @@ class _TaskHomeState extends State<TaskHome> {
         ],
       ),
     );
+  }
+
+  /// How tall the fade over the last cards is.
+  static const _fade = 32.0;
+
+  /// The day a swipe landed on and which way it went (1 forward, -1
+  /// back): that day slides in from the side, a tapped one rises.
+  LocalDate? swipedTo;
+  int swiped = 0;
+
+  /// Stays within the two weeks the header shows.
+  void swipeDay(DragEndDetails details) {
+    final v = details.primaryVelocity ?? 0;
+    if (v.abs() < 300) return;
+    final step = v < 0 ? 1 : -1, today = c.today();
+    final next = LocalDate.parse(
+      c.day.utc.add(Duration(days: step)).toIso8601String().substring(0, 10),
+    );
+    final fromMonday =
+        next.utc.difference(today.utc).inDays + today.utc.weekday - 1;
+    if (fromMonday < 0 || fromMonday >= 14) return;
+    DaySound.play(context, UiSound.nav);
+    HapticFeedback.selectionClick();
+    swiped = step;
+    swipedTo = next;
+    c.selectDay(next);
   }
 
   Widget filters() => DaySegments(

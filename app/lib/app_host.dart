@@ -226,8 +226,38 @@ class _DayHostState extends State<DayHost> with WidgetsBindingObserver {
       deviceId: widget.deviceId,
       scheduler: TimerScheduler(),
     );
-    engine!.setForeground(true);
+    _offlineSince = null;
     engine!.addListener(showSyncConflict);
+    engine!.addListener(announceSync);
+    engine!.setForeground(true);
+  }
+
+  /// Set on connecting: the first full sync says it is done.
+  bool _announceSync = false;
+  DateTime? _offlineSince;
+
+  /// «All synced» once after connecting and after the network comes back,
+  /// not on every quiet pass, so it means something when it shows. A blip
+  /// shorter than 10 seconds on a phone network is not worth a word.
+  void announceSync() {
+    final state = engine?.state;
+    if (state == SyncState.offline) _offlineSince ??= DateTime.now();
+    if (state != SyncState.synced) return;
+    final recovered =
+        _offlineSince != null &&
+        DateTime.now().difference(_offlineSince!) >=
+            const Duration(seconds: 10);
+    _offlineSince = null;
+    if (!_announceSync && !recovered) return;
+    final context = navigatorKey.currentContext;
+    if (context == null || !context.mounted) return;
+    DayToast.show(
+      context,
+      _announceSync
+          ? 'Все задачи синхронизированы'
+          : 'Связь восстановлена, все задачи синхронизированы',
+    );
+    _announceSync = false;
   }
 
   Future<void> stopSync() async {
@@ -249,6 +279,7 @@ class _DayHostState extends State<DayHost> with WidgetsBindingObserver {
     database = result.database;
     secret = result.secret;
     connectionLost = false;
+    _announceSync = true;
     configure();
     setState(() {});
     if (previous != widget.rootDatabase) await previous.close();

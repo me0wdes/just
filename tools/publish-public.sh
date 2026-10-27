@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Mirrors Just/ from claude-work HEAD into the public repo me0wdes/just.
+# Mirrors HEAD of the private repo me0wdes/just-dev into the public repo me0wdes/just.
 # Personal reference images (docs/references/REF-*.jpg) never leave the private repo.
 # Usage: tools/publish-public.sh "message" [vX.Y.Z]
 # A tag starts .github/workflows/release.yml, which builds Windows and macOS
@@ -13,7 +13,7 @@ trap 'rm -rf "$work"' EXIT
 
 gh repo clone me0wdes/just "$work/repo" -- -q
 find "$work/repo" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
-git -C "$root" archive HEAD:Just | tar -x -C "$work/repo"
+git -C "$root" archive HEAD | tar -x -C "$work/repo"
 rm -f "$work/repo"/docs/references/REF-*.jpg
 # Releases already out, newest first, for the download list in README.
 releases=$(gh release list -R me0wdes/just --limit 5 --json tagName -q '.[].tagName' | tr '\n' ' ')
