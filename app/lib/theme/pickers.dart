@@ -143,19 +143,16 @@ class _DatePickerState extends State<_DatePicker> {
               const SizedBox(height: 16),
               SizedBox(
                 width: 7 * 40,
-                child: Row(
-                  children: [
-                    DayButton(
-                      kind: DayButtonKind.ghost,
-                      onPressed: () => Navigator.pop(context),
-                      label: const Text('Отмена'),
-                    ),
-                    const Spacer(),
-                    DayButton(
-                      onPressed: () => Navigator.pop(context, selected),
-                      label: const Text('Готово'),
-                    ),
-                  ],
+                child: _Actions(
+                  cancel: DayButton(
+                    kind: DayButtonKind.ghost,
+                    onPressed: () => Navigator.pop(context),
+                    label: const Text('Отмена'),
+                  ),
+                  done: DayButton(
+                    onPressed: () => Navigator.pop(context, selected),
+                    label: const Text('Готово'),
+                  ),
                 ),
               ),
             ],
@@ -322,22 +319,19 @@ class _TimePickerState extends State<_TimePicker> {
                 },
               ),
               const SizedBox(height: 16),
-              Row(
-                children: [
-                  DayButton(
-                    kind: DayButtonKind.ghost,
-                    onPressed: () => Navigator.pop(context),
-                    label: Text(widget.cancelText),
+              _Actions(
+                cancel: DayButton(
+                  kind: DayButtonKind.ghost,
+                  onPressed: () => Navigator.pop(context),
+                  label: Text(widget.cancelText),
+                ),
+                done: DayButton(
+                  onPressed: () => Navigator.pop(
+                    context,
+                    TimeOfDay(hour: hour, minute: minute),
                   ),
-                  const Spacer(),
-                  DayButton(
-                    onPressed: () => Navigator.pop(
-                      context,
-                      TimeOfDay(hour: hour, minute: minute),
-                    ),
-                    label: const Text('Готово'),
-                  ),
-                ],
+                  label: const Text('Готово'),
+                ),
               ),
             ],
           ),
@@ -468,4 +462,21 @@ class _DialPainter extends CustomPainter {
   @override
   bool shouldRepaint(_DialPainter old) =>
       old.value != value || old.minutes != minutes || old.colors != colors;
+}
+
+/// Cancel on the left, done on the right; a phone splits the width between
+/// them so both are wide thumb targets.
+class _Actions extends StatelessWidget {
+  final Widget cancel, done;
+  const _Actions({required this.cancel, required this.done});
+  @override
+  Widget build(BuildContext context) => MediaQuery.sizeOf(context).width < 600
+      ? Row(
+          children: [
+            Expanded(child: cancel),
+            const SizedBox(width: 8),
+            Expanded(child: done),
+          ],
+        )
+      : Row(children: [cancel, const Spacer(), done]);
 }

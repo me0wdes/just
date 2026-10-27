@@ -105,217 +105,244 @@ class _SettingsPanelState extends State<SettingsPanel> {
       final s = widget.settings;
       final colors = DayColors.of(context);
       const modes = [ThemeMode.system, ThemeMode.light, ThemeMode.dark];
-      return Dialog(
-        insetPadding: const EdgeInsets.all(16),
-        clipBehavior: Clip.antiAlias,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 500, maxHeight: 760),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 14, 10, 12),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'Настройки',
-                        style: Theme.of(context).textTheme.titleLarge!
-                            .copyWith(fontWeight: FontWeight.w700),
-                      ),
-                    ),
-                    FluidIconButton(
-                      tooltip: 'Закрыть',
-                      sound: null,
-                      onPressed: () => Navigator.pop(context),
-                      icon: const DayIcon(DayGlyph.close, size: 20),
-                    ),
-                  ],
+      // A phone gets a full screen of its own with a back arrow; a
+      // computer keeps the dialog over the tasks.
+      final phone = MediaQuery.sizeOf(context).width < 600;
+      final title = Text(
+        'Настройки',
+        style: Theme.of(context).textTheme.titleLarge!
+            .copyWith(fontWeight: FontWeight.w700),
+      );
+      final header = Padding(
+        padding: phone
+            ? const EdgeInsets.fromLTRB(8, 8, 20, 8)
+            : const EdgeInsets.fromLTRB(20, 14, 10, 12),
+        child: Row(
+          children: [
+            if (phone) ...[
+              FluidIconButton(
+                tooltip: 'Назад',
+                sound: null,
+                onPressed: () => Navigator.pop(context),
+                icon: const RotatedBox(
+                  quarterTurns: 1,
+                  child: DayIcon(DayGlyph.down, size: 22),
                 ),
               ),
-              Divider(color: colors.divider),
-              Flexible(
-                child: ListView(
-                  shrinkWrap: true,
-                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                  children: [
-                    // Figma «Настройки»: three buttons on a computer, a
-                    // dropdown on a phone, where they would not fit.
-                    section('Оформление', [
-                      if (MediaQuery.sizeOf(context).width < 600)
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                'Тема',
-                                style: Theme.of(context).textTheme.bodyLarge,
-                              ),
-                            ),
-                            SizedBox(
-                              width: 150,
-                              child: DaySelect<ThemeMode>(
-                                value: s.themeMode,
-                                items: [
-                                  for (final (i, label) in const [
-                                    'Системная',
-                                    'Светлая',
-                                    'Тёмная',
-                                  ].indexed)
-                                    DaySelectItem(modes[i], label),
-                                ],
-                                onChanged: s.setTheme,
-                              ),
-                            ),
-                          ],
-                        )
-                      else
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: DaySegments(
-                            index: modes.indexOf(s.themeMode),
-                            labels: const ['Системная', 'Светлая', 'Тёмная'],
-                            onChanged: (i) => s.setTheme(modes[i]),
-                          ),
-                        ),
-                    ]),
-                    section('Взаимодействие', [
-                      FluidSwitchTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('Звуки интерфейса'),
-                        value: s.completionSoundEnabled,
-                        onChanged: s.setSound,
-                      ),
-                      if (s.completionSoundEnabled)
-                        // Figma «Громкость / Иконки»: quiet and loud at the ends.
-                        Row(
-                          children: [
-                            DayIcon(
-                              DayGlyph.volumeLow,
-                              size: 20,
-                              color: colors.muted,
-                            ),
-                            Expanded(
-                              // Clean track as in Figma: no tick marks, icons
-                              // 12 px from its ends.
-                              child: SliderTheme(
-                                data: SliderTheme.of(context).copyWith(
-                                  tickMarkShape: SliderTickMarkShape.noTickMark,
-                                ),
-                                child: Slider(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                  ),
-                                  value: s.volume,
-                                  onChanged: s.setVolume,
-                                  // Let the user hear the level they picked.
-                                  onChangeEnd: (_) =>
-                                      DaySound.play(context, UiSound.complete),
-                                  label: 'Громкость',
-                                  divisions: 20,
-                                ),
-                              ),
-                            ),
-                            DayIcon(
-                              DayGlyph.volumeHigh,
-                              size: 20,
-                              color: colors.muted,
-                            ),
-                          ],
-                        ),
-                      FluidSwitchTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('Вибрация'),
-                        value: s.hapticsEnabled,
-                        onChanged: s.setHaptics,
-                      ),
-                    ]),
-                    if (widget.connectionPanel != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 18),
-                        child: widget.connectionPanel!,
-                      ),
-                    section('Данные', [
-                      // Inset so the hover fill does not start at the icon;
-                      // the surface lets the icon play its motion.
-                      FluidSurface(
-                        sound: null,
-                        child: ListTile(
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          leading: const DayIcon(DayGlyph.upload, size: 20),
-                          title: const Text('Сохранить копию задач'),
-                          onTap: busy
-                              ? null
-                              : () {
-                                  DaySound.play(context, UiSound.tap);
-                                  transfer(false);
-                                },
-                        ),
-                      ),
-                      // Inset so the hover fill does not start at the icon;
-                      // the surface lets the icon play its motion.
-                      FluidSurface(
-                        sound: null,
-                        child: ListTile(
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          leading: const DayIcon(DayGlyph.download, size: 20),
-                          title: const Text('Импортировать копию'),
-                          onTap: busy
-                              ? null
-                              : () {
-                                  DaySound.play(context, UiSound.tap);
-                                  transfer(true);
-                                },
-                        ),
-                      ),
-                    ]),
-                    if (busy) const LinearProgressIndicator(),
-                    if (message != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 16),
-                        child: Text(message!),
-                      ),
-                    const SizedBox(height: 20),
+              const SizedBox(width: 4),
+            ],
+            Expanded(child: title),
+            if (!phone)
+              FluidIconButton(
+                tooltip: 'Закрыть',
+                sound: null,
+                onPressed: () => Navigator.pop(context),
+                icon: const DayIcon(DayGlyph.close, size: 20),
+              ),
+          ],
+        ),
+      );
+      final content = Column(
+        mainAxisSize: phone ? MainAxisSize.max : MainAxisSize.min,
+        children: [
+          header,
+          Divider(color: colors.divider),
+          Flexible(
+            fit: phone ? FlexFit.tight : FlexFit.loose,
+            child: ListView(
+              shrinkWrap: !phone,
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+              children: [
+                // Figma «Настройки»: three buttons on a computer, a
+                // dropdown on a phone, where they would not fit.
+                section('Оформление', [
+                  if (MediaQuery.sizeOf(context).width < 600)
                     Row(
                       children: [
                         Expanded(
                           child: Text(
-                            // Release builds carry their version from CI.
-                            'Just · ${appVersion.isEmpty ? 'dev' : appVersion}',
-                            style: Theme.of(context).textTheme.bodySmall!
-                                .copyWith(color: colors.muted),
+                            'Тема',
+                            style: Theme.of(context).textTheme.bodyLarge,
                           ),
                         ),
-                        // A missed «Вышла версия» toast stays reachable here.
-                        if (widget.updateVersion != null &&
-                            widget.onUpdate != null)
-                          DayButton(
-                            key: const Key('settings-update'),
-                            kind: DayButtonKind.secondary,
-                            onPressed: () {
-                              Navigator.pop(context);
-                              widget.onUpdate!();
-                            },
-                            label: Text('Обновить до ${widget.updateVersion}'),
+                        SizedBox(
+                          width: 150,
+                          child: DaySelect<ThemeMode>(
+                            value: s.themeMode,
+                            items: [
+                              for (final (i, label) in const [
+                                'Системная',
+                                'Светлая',
+                                'Тёмная',
+                              ].indexed)
+                                DaySelectItem(modes[i], label),
+                            ],
+                            onChanged: s.setTheme,
                           ),
+                        ),
+                      ],
+                    )
+                  else
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: DaySegments(
+                        index: modes.indexOf(s.themeMode),
+                        labels: const ['Системная', 'Светлая', 'Тёмная'],
+                        onChanged: (i) => s.setTheme(modes[i]),
+                      ),
+                    ),
+                ]),
+                section('Взаимодействие', [
+                  FluidSwitchTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Звуки интерфейса'),
+                    value: s.completionSoundEnabled,
+                    onChanged: s.setSound,
+                  ),
+                  if (s.completionSoundEnabled)
+                    // Figma «Громкость / Иконки»: quiet and loud at the ends.
+                    Row(
+                      children: [
+                        DayIcon(
+                          DayGlyph.volumeLow,
+                          size: 20,
+                          color: colors.muted,
+                        ),
+                        Expanded(
+                          // Clean track as in Figma: no tick marks, icons
+                          // 12 px from its ends.
+                          child: SliderTheme(
+                            data: SliderTheme.of(context).copyWith(
+                              tickMarkShape: SliderTickMarkShape.noTickMark,
+                            ),
+                            child: Slider(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                              ),
+                              value: s.volume,
+                              onChanged: s.setVolume,
+                              // Let the user hear the level they picked.
+                              onChangeEnd: (_) =>
+                                  DaySound.play(context, UiSound.complete),
+                              label: 'Громкость',
+                              divisions: 20,
+                            ),
+                          ),
+                        ),
+                        DayIcon(
+                          DayGlyph.volumeHigh,
+                          size: 20,
+                          color: colors.muted,
+                        ),
                       ],
                     ),
+                  FluidSwitchTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Вибрация'),
+                    value: s.hapticsEnabled,
+                    onChanged: s.setHaptics,
+                  ),
+                ]),
+                if (widget.connectionPanel != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 18),
+                    child: widget.connectionPanel!,
+                  ),
+                section('Данные', [
+                  // Inset so the hover fill does not start at the icon;
+                  // the surface lets the icon play its motion.
+                  FluidSurface(
+                    sound: null,
+                    child: ListTile(
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      leading: const DayIcon(DayGlyph.upload, size: 20),
+                      title: const Text('Сохранить копию задач'),
+                      onTap: busy
+                          ? null
+                          : () {
+                              DaySound.play(context, UiSound.tap);
+                              transfer(false);
+                            },
+                    ),
+                  ),
+                  // Inset so the hover fill does not start at the icon;
+                  // the surface lets the icon play its motion.
+                  FluidSurface(
+                    sound: null,
+                    child: ListTile(
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      leading: const DayIcon(DayGlyph.download, size: 20),
+                      title: const Text('Импортировать копию'),
+                      onTap: busy
+                          ? null
+                          : () {
+                              DaySound.play(context, UiSound.tap);
+                              transfer(true);
+                            },
+                    ),
+                  ),
+                ]),
+                if (busy) const LinearProgressIndicator(),
+                if (message != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 16),
+                    child: Text(message!),
+                  ),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        // Release builds carry their version from CI.
+                        'Just · ${appVersion.isEmpty ? 'dev' : appVersion}',
+                        style: Theme.of(context).textTheme.bodySmall!
+                            .copyWith(color: colors.muted),
+                      ),
+                    ),
+                    // A missed «Вышла версия» toast stays reachable here.
+                    if (widget.updateVersion != null && widget.onUpdate != null)
+                      DayButton(
+                        key: const Key('settings-update'),
+                        kind: DayButtonKind.secondary,
+                        onPressed: () {
+                          Navigator.pop(context);
+                          widget.onUpdate!();
+                        },
+                        label: Text('Обновить до ${widget.updateVersion}'),
+                      ),
                   ],
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
+        ],
       );
+      return phone
+          ? Material(
+              color: colors.screen,
+              child: SafeArea(child: content),
+            )
+          : Dialog(
+              insetPadding: const EdgeInsets.all(16),
+              clipBehavior: Clip.antiAlias,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(
+                  maxWidth: 500,
+                  maxHeight: 760,
+                ),
+                child: content,
+              ),
+            );
     },
   );
 }

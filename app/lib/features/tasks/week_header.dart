@@ -155,14 +155,58 @@ class _WeekHeaderState extends State<WeekHeader> {
         : dayView
         ? Wrap(
             alignment: WrapAlignment.center,
-            spacing: 7,
             runSpacing: 7,
             children: [
               strip(monday),
-              if (showNext)
-                strip(_plus(monday, 7), onClose: fold)
-              else if (nextCount > 0)
-                _MorePill(count: nextCount, onTap: open),
+              // The next week slides out sideways from behind «+N» and
+              // slides back in on ×; the week beside it eases over.
+              AnimatedSwitcher(
+                duration: MotionTokens.duration(context, MotionTokens.panel),
+                switchInCurve: MotionTokens.easeOut,
+                // Played backwards on ×, so flipped: it starts at once and settles.
+                switchOutCurve: MotionTokens.easeOut.flipped,
+                layoutBuilder: (current, previous) => Stack(
+                  alignment: Alignment.centerLeft,
+                  children: [...previous, ?current],
+                ),
+                // The week keeps its round end while it slides; «+N» only
+                // shows once the week is nearly out of the way.
+                transitionBuilder: (child, animation) => ClipRRect(
+                  borderRadius: BorderRadius.circular(28),
+                  child: SizeTransition(
+                    axis: Axis.horizontal,
+                    alignment: Alignment.centerLeft,
+                    sizeFactor: animation,
+                    child: child.key == const ValueKey('next')
+                        ? SlideTransition(
+                            position: Tween(
+                              begin: const Offset(-.25, 0),
+                              end: Offset.zero,
+                            ).animate(animation),
+                            child: child,
+                          )
+                        : FadeTransition(
+                            opacity: CurvedAnimation(
+                              parent: animation,
+                              curve: const Interval(.6, 1),
+                            ),
+                            child: child,
+                          ),
+                  ),
+                ),
+                child: Padding(
+                  key: ValueKey(showNext ? 'next' : nextCount > 0),
+                  // The gap lives inside, so it folds away with the week.
+                  padding: EdgeInsets.only(
+                    left: showNext || nextCount > 0 ? 7 : 0,
+                  ),
+                  child: showNext
+                      ? strip(_plus(monday, 7), onClose: fold)
+                      : nextCount > 0
+                      ? _MorePill(count: nextCount, onTap: open)
+                      : const SizedBox.shrink(),
+                ),
+              ),
             ],
           )
         : Row(

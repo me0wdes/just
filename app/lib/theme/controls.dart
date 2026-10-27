@@ -703,13 +703,118 @@ class DayMenuItem {
 
 /// Context menu at the pointer, in the select popup's skin: grows in on
 /// the fast tier, one hover highlight travels between rows.
+///
+/// Touch passes the held card's [anchor] and a [preview] of it: the screen
+/// dims, the card stays lit on top, and a menu with finger-sized rows pops
+/// out beside it, the way iOS does it.
 Future<void> showDayMenu(
   BuildContext context,
   Offset position,
-  List<DayMenuItem> items,
-) {
+  List<DayMenuItem> items, {
+  Rect? anchor,
+  Widget? preview,
+}) {
   DaySound.play(context, UiSound.open);
-  return Navigator.of(context).push(_MenuRoute(position, items));
+  return Navigator.of(context).push(
+    anchor == null
+        ? _MenuRoute(position, items)
+        : _TouchMenuRoute(position, items, anchor, preview),
+  );
+}
+
+class _TouchMenuRoute extends PopupRoute<void> {
+  final Offset position;
+  final List<DayMenuItem> items;
+  final Rect anchor;
+  final Widget? preview;
+  _TouchMenuRoute(this.position, this.items, this.anchor, this.preview);
+  static const rowHeight = 52.0, width = 250.0, gap = 8.0;
+  @override
+  Color? get barrierColor => Colors.black.withValues(alpha: .28);
+  @override
+  bool get barrierDismissible => true;
+  @override
+  String? get barrierLabel => 'Закрыть меню';
+  @override
+  Duration get transitionDuration => const Duration(milliseconds: 280);
+  @override
+  Duration get reverseTransitionDuration => const Duration(milliseconds: 160);
+
+  @override
+  Widget buildPage(context, animation, secondaryAnimation) {
+    final size = MediaQuery.sizeOf(context);
+    final pad = MediaQuery.paddingOf(context);
+    final height = items.length * rowHeight + 10;
+    // Under the card when it fits, else over it; on the finger's side.
+    final below = anchor.bottom + gap + height <= size.height - pad.bottom - 8;
+    final top = below
+        ? anchor.bottom + gap
+        : math.max(pad.top + 8, anchor.top - gap - height);
+    final right = position.dx > anchor.center.dx;
+    final left = (right ? anchor.right - width : anchor.left)
+        .clamp(8.0, math.max(8.0, size.width - width - 8))
+        .toDouble();
+    final pop = MediaQuery.disableAnimationsOf(context)
+        ? animation
+        : CurvedAnimation(
+            parent: animation,
+            curve: const Cubic(.34, 1.36, .64, 1),
+            reverseCurve: Curves.easeIn,
+          );
+    return Stack(
+      children: [
+        if (preview != null)
+          Positioned.fromRect(
+            rect: anchor,
+            child: IgnorePointer(
+              child: AnimatedBuilder(
+                animation: animation,
+                child: preview,
+                builder: (context, child) => Transform.scale(
+                  scale: 1 + .03 * Curves.easeOut.transform(animation.value),
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(14),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(
+                            alpha: .22 * animation.value,
+                          ),
+                          blurRadius: 28,
+                          offset: const Offset(0, 10),
+                        ),
+                      ],
+                    ),
+                    child: child,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        Positioned(
+          left: left,
+          top: top,
+          width: width,
+          child: FadeTransition(
+            opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
+            child: ScaleTransition(
+              scale: Tween(begin: .6, end: 1.0).animate(pop),
+              alignment: Alignment(right ? .8 : -.8, below ? -1.0 : 1.0),
+              child: _MenuPanel(
+                items: items,
+                rowHeight: rowHeight,
+                close: () => Navigator.pop(context),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget buildTransitions(context, animation, secondaryAnimation, child) =>
+      child;
 }
 
 class _MenuRoute extends PopupRoute<void> {
@@ -778,7 +883,12 @@ class _MenuRoute extends PopupRoute<void> {
 class _MenuPanel extends StatefulWidget {
   final List<DayMenuItem> items;
   final VoidCallback close;
-  const _MenuPanel({required this.items, required this.close});
+  final double rowHeight;
+  const _MenuPanel({
+    required this.items,
+    required this.close,
+    this.rowHeight = controlHeight,
+  });
   @override
   State<_MenuPanel> createState() => _MenuPanelState();
 }
@@ -789,13 +899,14 @@ class _MenuPanelState extends State<_MenuPanel> {
   Widget build(BuildContext context) {
     final c = DayColors.of(context);
     final fast = MotionTokens.duration(context, MotionTokens.fast);
+    final row = widget.rowHeight, touch = row > controlHeight;
     return Material(
       type: MaterialType.transparency,
       child: Container(
         padding: const EdgeInsets.all(4),
         decoration: BoxDecoration(
           color: c.screen,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(touch ? 16 : 12),
           border: Border.all(color: c.border),
           boxShadow: const [
             BoxShadow(
@@ -812,17 +923,17 @@ class _MenuPanelState extends State<_MenuPanel> {
               AnimatedPositioned(
                 duration: fast,
                 curve: Curves.easeOut,
-                top: (highlight ?? 0) * controlHeight,
+                top: (highlight ?? 0) * row,
                 left: 0,
                 right: 0,
-                height: controlHeight,
+                height: row,
                 child: AnimatedOpacity(
                   opacity: highlight == null ? 0 : 1,
                   duration: fast,
                   child: DecoratedBox(
                     decoration: BoxDecoration(
                       color: overlay(context, .05, .07),
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(touch ? 12 : 8),
                     ),
                   ),
                 ),
@@ -845,19 +956,21 @@ class _MenuPanelState extends State<_MenuPanel> {
                           item.onTap();
                         },
                         child: SizedBox(
-                          height: controlHeight,
+                          height: row,
                           child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            padding: EdgeInsets.symmetric(
+                              horizontal: touch ? 14 : 10,
+                            ),
                             child: Row(
                               children: [
                                 DayIcon(
                                   widget.items[i].icon,
-                                  size: 16,
+                                  size: touch ? 20 : 16,
                                   color: widget.items[i].destructive
                                       ? c.overdue
                                       : c.muted,
                                 ),
-                                const SizedBox(width: 10),
+                                SizedBox(width: touch ? 12 : 10),
                                 Expanded(
                                   child: Text(
                                     widget.items[i].label,
@@ -867,6 +980,7 @@ class _MenuPanelState extends State<_MenuPanel> {
                                         .textTheme
                                         .bodyMedium!
                                         .copyWith(
+                                          fontSize: touch ? 16 : null,
                                           color: widget.items[i].destructive
                                               ? c.overdue
                                               : c.text,
@@ -1106,8 +1220,13 @@ class DayDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = DayColors.of(context);
     final text = Theme.of(context).textTheme;
+    final phone = MediaQuery.sizeOf(context).width < 600;
     return Dialog(
       clipBehavior: Clip.antiAlias,
+      // Figma «Телефон · подключить устройства»: 16 from the screen edges.
+      insetPadding: phone
+          ? const EdgeInsets.symmetric(horizontal: 16, vertical: 24)
+          : null,
       child: SizedBox(
         width: width,
         child: Padding(
@@ -1140,18 +1259,30 @@ class DayDialog extends StatelessWidget {
               ],
               if (actions.isNotEmpty) ...[
                 const SizedBox(height: 20),
-                // In a row when they fit (first left, the rest right); on a
-                // narrow phone they stack, the main action on top.
-                OverflowBar(
-                  alignment: actions.length == 1
-                      ? MainAxisAlignment.end
-                      : MainAxisAlignment.spaceBetween,
-                  spacing: 8,
-                  overflowSpacing: 8,
-                  overflowAlignment: OverflowBarAlignment.end,
-                  overflowDirection: VerticalDirection.up,
-                  children: actions,
-                ),
+                // Phone: full-width buttons in a column, the main action
+                // (listed last) on top, easy to reach with a thumb.
+                if (phone)
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (final (i, action) in actions.reversed.indexed) ...[
+                        if (i > 0) const SizedBox(height: 8),
+                        action,
+                      ],
+                    ],
+                  )
+                else
+                  // In a row when they fit (first left, the rest right).
+                  OverflowBar(
+                    alignment: actions.length == 1
+                        ? MainAxisAlignment.end
+                        : MainAxisAlignment.spaceBetween,
+                    spacing: 8,
+                    overflowSpacing: 8,
+                    overflowAlignment: OverflowBarAlignment.end,
+                    overflowDirection: VerticalDirection.up,
+                    children: actions,
+                  ),
               ],
             ],
           ),

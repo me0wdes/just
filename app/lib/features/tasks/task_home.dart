@@ -334,7 +334,10 @@ class _TaskHomeState extends State<TaskHome> {
       itemBuilder: (context, index) {
         final task = items[index];
         final fresh = known.add(task.id);
-        final row = TaskRow(
+        // The card on screen, so a touch menu can lift it over the dimming.
+        BuildContext? card;
+        late final TaskRow row;
+        row = TaskRow(
           task: task,
           selected: c.selectedId == task.id,
           today: c.query.today,
@@ -342,20 +345,33 @@ class _TaskHomeState extends State<TaskHome> {
           onOpen: () => open(task, inline),
           // A finished card cannot be dragged, so its long press is free.
           longPressMenu: !desktop && task.completed,
-          onMenu: (at) => showDayMenu(context, at, [
-            DayMenuItem('Открыть', DayGlyph.note, () => open(task, inline)),
-            DayMenuItem(
-              task.completed ? 'Вернуть' : 'Выполнить',
-              DayGlyph.check,
-              () => toggle(task),
-            ),
-            DayMenuItem(
-              'Удалить',
-              DayGlyph.delete,
-              () => remove(task),
-              destructive: true,
-            ),
-          ]),
+          onMenu: (at) => showDayMenu(
+            context,
+            at,
+            anchor: desktop ? null : _rectOf(card),
+            preview: row,
+            [
+              DayMenuItem('Открыть', DayGlyph.note, () => open(task, inline)),
+              DayMenuItem(
+                task.completed ? 'Вернуть' : 'Выполнить',
+                DayGlyph.check,
+                () => toggle(task),
+              ),
+              DayMenuItem(
+                'Удалить',
+                DayGlyph.delete,
+                () => remove(task),
+                destructive: true,
+              ),
+            ],
+          ),
+        );
+        final held = Builder(
+          builder: (context) {
+            // The drag proxy builds this too; the list's own card wins.
+            if (card?.mounted != true) card = context;
+            return row;
+          },
         );
         return KeyedSubtree(
           key: ValueKey(task.id),
@@ -373,7 +389,7 @@ class _TaskHomeState extends State<TaskHome> {
                           ? _CardDrag(
                               index: index,
                               enabled: !task.completed,
-                              child: row,
+                              child: held,
                             )
                           : Listener(
                               onPointerDown: (e) {
@@ -390,7 +406,7 @@ class _TaskHomeState extends State<TaskHome> {
                               child: ReorderableDelayedDragStartListener(
                                 index: index,
                                 enabled: !task.completed,
-                                child: row,
+                                child: held,
                               ),
                             ),
                     ),
@@ -555,6 +571,14 @@ class _TaskHomeState extends State<TaskHome> {
         ],
       ),
     );
+  }
+
+  Rect? _rectOf(BuildContext? card) {
+    final box = card != null && card.mounted
+        ? card.findRenderObject() as RenderBox?
+        : null;
+    if (box == null || !box.hasSize) return null;
+    return box.localToGlobal(Offset.zero) & box.size;
   }
 
   /// How tall the fade over the last cards is.

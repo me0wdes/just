@@ -199,6 +199,8 @@ class _ConnectionPanelState extends State<ConnectionPanel> {
     final c = DayColors.of(context);
     final theme = Theme.of(context);
     final small = theme.textTheme.bodySmall!.copyWith(color: c.muted);
+    // Phone: buttons span the full width, easy to hit with a thumb.
+    final phone = MediaQuery.sizeOf(context).width < 600;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -266,7 +268,9 @@ class _ConnectionPanelState extends State<ConnectionPanel> {
                 : 'Just возьмёт строку из буфера обмена и сразу подключится.',
             child: manual
                 ? Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    crossAxisAlignment: phone
+                        ? CrossAxisAlignment.stretch
+                        : CrossAxisAlignment.start,
                     children: [
                       TextField(
                         key: const Key('sync-endpoint'),
@@ -299,6 +303,7 @@ class _ConnectionPanelState extends State<ConnectionPanel> {
                 : Align(
                     alignment: Alignment.centerLeft,
                     child: DayButton(
+                      expand: phone,
                       onPressed: busy ? null : pasteAndConnect,
                       label: Text(
                         busy ? 'Проверяем…' : 'Вставить и подключить',
@@ -308,6 +313,7 @@ class _ConnectionPanelState extends State<ConnectionPanel> {
           ),
           DayButton(
             kind: DayButtonKind.ghost,
+            expand: phone,
             onPressed: busy
                 ? null
                 : () => setState(() {

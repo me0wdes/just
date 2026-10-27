@@ -106,39 +106,42 @@ class DayApp extends StatelessWidget {
   void openSettings(BuildContext context) {
     if (settings == null || backups == null) return;
     DaySound.play(context, UiSound.open);
-    showDialog<void>(
-      context: context,
-      builder: (_) => SettingsPanel(
-        settings: settings!,
-        backups: backups!,
-        files: NativeFileDialogs(),
-        updateVersion: updateVersion,
-        onUpdate: onUpdate,
-        connectionPanel: connections == null
-            ? null
-            : ConnectionPanel(
-                service: connections!,
-                engine: engine,
-                server: server,
-                lost: connectionLost,
-                onConnected: (result) async {
-                  Navigator.of(context).pop();
-                  await onConnected?.call(result);
-                  if (context.mounted) {
-                    DayToast.show(
-                      context,
-                      'Подключено к ${serverName(result.secret.endpoint)}. Задачи синхронизируются',
-                    );
-                  }
-                },
-                onDisconnected: () async {
-                  Navigator.of(context).pop();
-                  await onDisconnected?.call();
-                },
-              ),
-      ),
-    ).then((_) {
-      if (context.mounted) DaySound.play(context, UiSound.close);
-    });
+    // Phone: a full-screen page, not a window over the tasks.
+    final phone = MediaQuery.sizeOf(context).width < 600;
+    Widget page(BuildContext _) => SettingsPanel(
+      settings: settings!,
+      backups: backups!,
+      files: NativeFileDialogs(),
+      updateVersion: updateVersion,
+      onUpdate: onUpdate,
+      connectionPanel: connections == null
+          ? null
+          : ConnectionPanel(
+              service: connections!,
+              engine: engine,
+              server: server,
+              lost: connectionLost,
+              onConnected: (result) async {
+                Navigator.of(context).pop();
+                await onConnected?.call(result);
+                if (context.mounted) {
+                  DayToast.show(
+                    context,
+                    'Подключено к ${serverName(result.secret.endpoint)}. Задачи синхронизируются',
+                  );
+                }
+              },
+              onDisconnected: () async {
+                Navigator.of(context).pop();
+                await onDisconnected?.call();
+              },
+            ),
+    );
+    (phone
+            ? Navigator.of(context).push<void>(MaterialPageRoute(builder: page))
+            : showDialog<void>(context: context, builder: page))
+        .then((_) {
+          if (context.mounted) DaySound.play(context, UiSound.close);
+        });
   }
 }
