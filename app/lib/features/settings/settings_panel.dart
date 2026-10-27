@@ -21,12 +21,16 @@ class SettingsPanel extends StatefulWidget {
   final BackupRepository backups;
   final FileDialogs files;
   final Widget? connectionPanel;
+  final String? updateVersion;
+  final VoidCallback? onUpdate;
   const SettingsPanel({
     super.key,
     required this.settings,
     required this.backups,
     required this.files,
     this.connectionPanel,
+    this.updateVersion,
+    this.onUpdate,
   });
   @override
   State<SettingsPanel> createState() => _SettingsPanelState();
@@ -281,11 +285,29 @@ class _SettingsPanelState extends State<SettingsPanel> {
                         child: Text(message!),
                       ),
                     const SizedBox(height: 20),
-                    Text(
-                      // Release builds carry their version from CI.
-                      'Just · ${appVersion.isEmpty ? 'dev' : appVersion}',
-                      style: Theme.of(context).textTheme.bodySmall!
-                          .copyWith(color: colors.muted),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            // Release builds carry their version from CI.
+                            'Just · ${appVersion.isEmpty ? 'dev' : appVersion}',
+                            style: Theme.of(context).textTheme.bodySmall!
+                                .copyWith(color: colors.muted),
+                          ),
+                        ),
+                        // A missed «Вышла версия» toast stays reachable here.
+                        if (widget.updateVersion != null &&
+                            widget.onUpdate != null)
+                          DayButton(
+                            key: const Key('settings-update'),
+                            kind: DayButtonKind.secondary,
+                            onPressed: () {
+                              Navigator.pop(context);
+                              widget.onUpdate!();
+                            },
+                            label: Text('Обновить до ${widget.updateVersion}'),
+                          ),
+                      ],
                     ),
                   ],
                 ),

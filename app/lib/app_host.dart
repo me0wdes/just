@@ -82,16 +82,32 @@ class _DayHostState extends State<DayHost> with WidgetsBindingObserver {
     });
     configure();
     checkUpdates();
-    updates = Timer.periodic(const Duration(hours: 6), (_) => checkUpdates());
+    updates = Timer.periodic(const Duration(hours: 1), (_) => checkUpdates());
   }
 
   Timer? updates;
   String? _offeredUpdate;
 
-  /// A new public release is offered once per version and session.
+  /// The newest release found; settings keep offering it after the toast.
+  AppUpdate? available;
+  DateTime? _checkedAt;
+
+  /// Looks for a release at start, hourly and on every return to Just
+  /// (at most every ten minutes). The toast shows once per version and
+  /// session; settings show the update until it is installed.
   Future<void> checkUpdates() async {
+    final now = DateTime.now();
+    if (_checkedAt != null &&
+        now.difference(_checkedAt!) < const Duration(minutes: 10)) {
+      return;
+    }
+    _checkedAt = now;
     final update = await checkForUpdate();
-    if (!mounted || update == null || update.version == _offeredUpdate) return;
+    if (!mounted || update == null) return;
+    if (available?.version != update.version) {
+      setState(() => available = update);
+    }
+    if (update.version == _offeredUpdate) return;
     _offeredUpdate = update.version;
     final context = navigatorKey.currentContext;
     if (context == null || !context.mounted) return;
@@ -100,27 +116,27 @@ class _DayHostState extends State<DayHost> with WidgetsBindingObserver {
       'Вышла версия ${update.version}',
       duration: const Duration(seconds: 12),
       action: 'Обновить',
-      onAction: () async {
-        final dialogContext = navigatorKey.currentContext;
-        // The installed Windows build shows its own progress window.
-        if (installsInPlace(update) &&
-            dialogContext != null &&
-            dialogContext.mounted) {
-          _offeredUpdate = null;
-          await showUpdateDialog(dialogContext, update);
-          return;
-        }
-        try {
-          await openDownload(update);
-        } catch (_) {
-          _offeredUpdate = null;
-          final c = navigatorKey.currentContext;
-          if (c != null && c.mounted) {
-            DayToast.show(c, 'Не удалось открыть загрузку');
-          }
-        }
-      },
+      onAction: () => startUpdate(update),
     );
+  }
+
+  Future<void> startUpdate(AppUpdate update) async {
+    final dialogContext = navigatorKey.currentContext;
+    // The installed Windows build shows its own progress window.
+    if (installsInPlace(update) &&
+        dialogContext != null &&
+        dialogContext.mounted) {
+      await showUpdateDialog(dialogContext, update);
+      return;
+    }
+    try {
+      await openDownload(update);
+    } catch (_) {
+      final c = navigatorKey.currentContext;
+      if (c != null && c.mounted) {
+        DayToast.show(c, 'Не удалось открыть загрузку');
+      }
+    }
   }
 
   void configure() {
@@ -318,6 +334,7 @@ class _DayHostState extends State<DayHost> with WidgetsBindingObserver {
     engine?.setForeground(state == AppLifecycleState.resumed);
     // The silent keep-alive runs only while Just is on screen.
     if (state == AppLifecycleState.resumed) {
+      checkUpdates();
       audio.keepAwake(widget.settings.completionSoundEnabled);
     } else if (state == AppLifecycleState.hidden ||
         state == AppLifecycleState.paused) {
@@ -346,6 +363,8 @@ class _DayHostState extends State<DayHost> with WidgetsBindingObserver {
     onConnected: activateWorkspace,
     onDisconnected: disconnect,
     connectionLost: connectionLost,
+    updateVersion: available?.version,
+    onUpdate: available == null ? null : () => startUpdate(available!),
     server: secret == null ? null : serverName(secret!.endpoint),
     onRequestReminder: requestReminder,
     navigatorKey: navigatorKey,

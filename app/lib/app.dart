@@ -31,6 +31,10 @@ class DayApp extends StatelessWidget {
 
   /// Where this device syncs, e.g. `104.171.128.200:8443`.
   final String? server;
+
+  /// A newer release and how to install it, offered in settings.
+  final String? updateVersion;
+  final VoidCallback? onUpdate;
   final Future<bool> Function()? onRequestReminder;
   final GlobalKey<NavigatorState>? navigatorKey;
   const DayApp({
@@ -45,6 +49,8 @@ class DayApp extends StatelessWidget {
     this.onDisconnected,
     this.connectionLost = false,
     this.server,
+    this.updateVersion,
+    this.onUpdate,
     this.onRequestReminder,
     this.navigatorKey,
   });
@@ -106,6 +112,8 @@ class DayApp extends StatelessWidget {
         settings: settings!,
         backups: backups!,
         files: NativeFileDialogs(),
+        updateVersion: updateVersion,
+        onUpdate: onUpdate,
         connectionPanel: connections == null
             ? null
             : ConnectionPanel(

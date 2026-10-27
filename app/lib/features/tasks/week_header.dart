@@ -572,6 +572,7 @@ class _Total extends StatelessWidget {
         children: [
           BlurSwap(
             swapKey: label,
+            alignment: AlignmentDirectional.centerStart,
             child: Text(
               label,
               maxLines: 1,
@@ -585,6 +586,7 @@ class _Total extends StatelessWidget {
           ),
           BlurSwap(
             swapKey: count,
+            alignment: AlignmentDirectional.centerStart,
             delay: const Duration(milliseconds: 100),
             child: Text(
               '$count ${_plural(count, 'задача', 'задачи', 'задач')}',
