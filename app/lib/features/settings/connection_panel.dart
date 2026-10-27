@@ -13,6 +13,8 @@ import '../../theme/day_icon.dart';
 import '../../theme/day_sound.dart';
 import '../../theme/motion_tokens.dart';
 import '../../theme/segments.dart';
+import '../../theme/fluid_surface.dart';
+import '../../theme/sync_status_icon.dart';
 
 import '../../sync/connection_service.dart';
 import '../../sync/sync_engine.dart';
@@ -214,80 +216,16 @@ class _ConnectionPanelState extends State<ConnectionPanel> {
         if (!serverMode)
           Text('Задачи хранятся только здесь, без синхронизации.', style: small)
         else if (connected) ...[
-          // Figma «Хранение данных · Подключено»: the server and how sync
-          // is doing, live while the settings stay open.
+          // Figma «Хранение данных · Подключено»: one card, every line on
+          // the same left edge, icon actions on the right.
           ListenableBuilder(
             listenable: widget.engine!,
-            builder: (context, _) {
-              final engine = widget.engine!;
-              final ok = engine.state == SyncState.synced;
-              final at = engine.lastSuccessAt?.toLocal();
-              final status = ok && at != null
-                  ? 'Синхронизировано в ${at.hour.toString().padLeft(2, '0')}:${at.minute.toString().padLeft(2, '0')}'
-                  : engine.state.label;
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.only(top: 2),
-                        child: DayIcon(
-                          DayGlyph.cloud,
-                          size: 16,
-                          color: switch (engine.state) {
-                            SyncState.offline ||
-                            SyncState.authRequired ||
-                            SyncState.rejected => c.overdue,
-                            _ => c.done,
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Синхронизация включена',
-                              style: theme.textTheme.bodyMedium!.copyWith(
-                                color: c.text,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              [?widget.server, status].join('\n'),
-                              key: const Key('sync-server'),
-                              style: small,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      DayButton(
-                        kind: DayButtonKind.secondary,
-                        onPressed: busy || engine.state == SyncState.syncing
-                            ? null
-                            : engine.syncNow,
-                        label: const Text('Синхронизировать'),
-                      ),
-                      DayButton(
-                        kind: DayButtonKind.ghost,
-                        onPressed: busy ? null : disconnect,
-                        label: const Text('Отключить'),
-                      ),
-                    ],
-                  ),
-                ],
-              );
-            },
+            builder: (context, _) => _ServerCard(
+              engine: widget.engine!,
+              server: widget.server,
+              busy: busy,
+              onDisconnect: disconnect,
+            ),
           ),
         ] else ...[
           if (widget.lost) ...[
@@ -513,6 +451,186 @@ class _CommandBoxState extends State<_CommandBox> {
             label: Text(copied ? 'Скопировано' : 'Скопировать'),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ServerCard extends StatelessWidget {
+  final SyncEngine engine;
+  final String? server;
+  final bool busy;
+  final VoidCallback onDisconnect;
+  const _ServerCard({
+    required this.engine,
+    required this.server,
+    required this.busy,
+    required this.onDisconnect,
+  });
+  @override
+  Widget build(BuildContext context) {
+    final c = DayColors.of(context);
+    final body = Theme.of(context).textTheme.bodyMedium!;
+    final mark = syncMark(engine.state);
+    final at = engine.lastSuccessAt?.toLocal();
+    final status = engine.state == SyncState.synced && at != null
+        ? 'Синхронизировано в ${at.hour.toString().padLeft(2, '0')}:${at.minute.toString().padLeft(2, '0')}'
+        : engine.state.label;
+    final syncing = engine.state == SyncState.syncing;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: c.input,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: c.screen,
+                        shape: BoxShape.circle,
+                      ),
+                      child: DayIcon(
+                        DayGlyph.cloud,
+                        size: 20,
+                        color: syncTone(context, mark),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Синхронизация включена',
+                            style: body.copyWith(
+                              fontSize: 15,
+                              height: 20 / 15,
+                              fontWeight: FontWeight.w500,
+                              color: c.text,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          if (server != null)
+                            Text(
+                              server!,
+                              key: const Key('sync-server'),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: body.copyWith(
+                                fontSize: 13,
+                                height: 18 / 13,
+                                color: c.muted,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    SyncStatusIcon(mark),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        status,
+                        key: const Key('sync-status'),
+                        style: body.copyWith(
+                          fontSize: 13,
+                          height: 18 / 13,
+                          color: c.muted,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 14),
+          Column(
+            children: [
+              _RoundAction(
+                glyph: DayGlyph.repeat,
+                tooltip: mark == SyncMark.error
+                    ? 'Повторить'
+                    : 'Синхронизировать',
+                // Top of the pair: the hint goes above, off the button below.
+                below: false,
+                onTap: busy || syncing ? null : engine.syncNow,
+              ),
+              const SizedBox(height: 8),
+              _RoundAction(
+                glyph: DayGlyph.disconnect,
+                tooltip: 'Отключить',
+                onTap: busy ? null : onDisconnect,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A round icon button on the card: 36 px, 44 on a phone.
+class _RoundAction extends StatelessWidget {
+  final DayGlyph glyph;
+  final String tooltip;
+  final bool below;
+  final VoidCallback? onTap;
+  const _RoundAction({
+    required this.glyph,
+    required this.tooltip,
+    required this.onTap,
+    this.below = true,
+  });
+  @override
+  Widget build(BuildContext context) {
+    final c = DayColors.of(context);
+    final size = MediaQuery.sizeOf(context).width < 600 ? 44.0 : 36.0;
+    return Tooltip(
+      message: tooltip,
+      preferBelow: below,
+      child: Semantics(
+        button: true,
+        enabled: onTap != null,
+        label: tooltip,
+        excludeSemantics: true,
+        child: Opacity(
+          opacity: onTap == null ? .45 : 1,
+          child: FluidSurface(
+            enabled: onTap != null,
+            pressScale: .92,
+            child: Material(
+              color: c.screen,
+              shape: const CircleBorder(),
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                onTap: onTap,
+                hoverColor: c.hover,
+                child: SizedBox.square(
+                  dimension: size,
+                  child: Center(
+                    child: DayIcon(glyph, size: 16, color: c.muted),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

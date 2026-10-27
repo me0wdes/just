@@ -92,11 +92,16 @@ void main() {
       ),
     );
     expect(find.text('Синхронизация включена'), findsOneWidget);
-    expect(
-      find.text('104.171.128.200:8443\nСохранено на устройстве'),
-      findsOneWidget,
-    );
-    expect(find.text('Синхронизировать'), findsOneWidget);
+    expect(find.text('104.171.128.200:8443'), findsOneWidget);
+    expect(find.text('Сохранено на устройстве'), findsOneWidget);
+    // Icon actions name themselves for hints and screen readers.
+    expect(find.byTooltip('Синхронизировать'), findsOneWidget);
+    expect(find.byTooltip('Отключить'), findsOneWidget);
+    engine.state = SyncState.offline;
+    engine.notifyListeners();
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Повторить'), findsOneWidget);
+    expect(find.text('Без сети · задачи сохранены'), findsOneWidget);
     engine.dispose();
   });
 

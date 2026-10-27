@@ -9,6 +9,7 @@ class BlurSwap extends StatelessWidget {
   final Widget child;
   final Object swapKey;
   final Duration delay;
+
   /// Where the old and new text line up while both are on screen.
   final AlignmentGeometry alignment;
   const BlurSwap({
@@ -27,10 +28,8 @@ class BlurSwap extends StatelessWidget {
         duration: const Duration(milliseconds: 500),
         switchInCurve: Curves.easeOut,
         switchOutCurve: Curves.easeIn,
-        layoutBuilder: (current, previous) => Stack(
-          alignment: alignment,
-          children: [...previous, ?current],
-        ),
+        layoutBuilder: (current, previous) =>
+            Stack(alignment: alignment, children: [...previous, ?current]),
         transitionBuilder: (child, animation) =>
             _Blur(animation: animation, child: child),
         child: KeyedSubtree(key: ValueKey(swapKey), child: child),

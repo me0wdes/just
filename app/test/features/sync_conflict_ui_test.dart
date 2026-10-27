@@ -67,7 +67,14 @@ void main() {
     // On a phone-sized window the sync status lives in the lists drawer.
     await tester.tap(find.byTooltip('Списки'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Есть конфликт · локальная копия сохранена'));
+    // The status is a cloud icon; its hint names the conflict.
+    expect(
+      find.byTooltip(
+        'Есть конфликт · локальная копия сохранена · нажмите, чтобы повторить',
+      ),
+      findsOneWidget,
+    );
+    await tester.tap(find.byKey(const Key('sidebar-sync')));
     await tester.pumpAndSettle();
     expect(find.text('Неотправленные изменения'), findsOneWidget);
     expect(find.text('Не удалось принять цвет списка.'), findsOneWidget);

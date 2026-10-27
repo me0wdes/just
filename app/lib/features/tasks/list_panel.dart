@@ -26,7 +26,7 @@ class ListPanel extends StatelessWidget {
     this.status,
   });
 
-  /// Sync status shown quietly above settings.
+  /// Sync status as an icon beside settings.
   final Widget? status;
   Future<void> edit(BuildContext context, {TaskList? list}) async {
     DaySound.play(context, UiSound.open);
@@ -110,30 +110,29 @@ class ListPanel extends StatelessWidget {
       () => controller.navigate(TaskView.all),
     );
     label('Мои списки');
-    for (final list in controller.lists) {
+    // Tasks without a list live in «Все задачи»; the inbox has no entry.
+    for (final list in controller.lists.where((l) => l.id != inboxId)) {
       item(
-        TaskController.listTitle(list),
-        list.id == inboxId ? DayGlyph.note : listGlyph(list.icon),
+        list.name,
+        listGlyph(list.icon),
         q.view == TaskView.list && q.listId == list.id,
         () => controller.navigate(TaskView.list, listId: list.id),
         // Right click (long press on touch) instead of a «…» button.
-        onMenu: list.id == inboxId
-            ? null
-            : (at) => showDayMenu(context, at, [
-                DayMenuItem(
-                  'Переименовать',
-                  DayGlyph.note,
-                  () => edit(context, list: list),
-                ),
-                DayMenuItem('Сменить иконку', listGlyph(list.icon), () async {
-                  final key = await showDayIconPicker(context, at, list.icon);
-                  if (key != null) await controller.setListIcon(list.id, key);
-                }),
-                DayMenuItem('Удалить список', DayGlyph.delete, () {
-                  DaySound.play(context, UiSound.delete);
-                  controller.deleteList(list.id);
-                }, destructive: true),
-              ]),
+        onMenu: (at) => showDayMenu(context, at, [
+          DayMenuItem(
+            'Переименовать',
+            DayGlyph.note,
+            () => edit(context, list: list),
+          ),
+          DayMenuItem('Сменить иконку', listGlyph(list.icon), () async {
+            final key = await showDayIconPicker(context, at, list.icon);
+            if (key != null) await controller.setListIcon(list.id, key);
+          }),
+          DayMenuItem('Удалить список', DayGlyph.delete, () {
+            DaySound.play(context, UiSound.delete);
+            controller.deleteList(list.id);
+          }, destructive: true),
+        ]),
       );
     }
     rows.add(
@@ -197,21 +196,26 @@ class ListPanel extends StatelessWidget {
                 ),
               ),
             ),
-            if (status != null)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(4, 8, 4, 4),
-                child: status!,
-              ),
-            if (onSettings != null) ...[
-              _NavItem(
-                title: 'Настройки',
-                icon: DayGlyph.settings,
-                selected: false,
-                height: extent,
-                sound: null,
-                onTap: onSettings!,
-              ),
-            ],
+            if (onSettings != null)
+              // Figma «Низ»: settings, and the sync cloud beside it while a
+              // server is connected.
+              Row(
+                children: [
+                  Expanded(
+                    child: _NavItem(
+                      title: 'Настройки',
+                      icon: DayGlyph.settings,
+                      selected: false,
+                      height: extent,
+                      sound: null,
+                      onTap: onSettings!,
+                    ),
+                  ),
+                  if (status != null) ...[const SizedBox(width: 4), status!],
+                ],
+              )
+            else if (status != null)
+              Align(alignment: Alignment.centerRight, child: status!),
           ],
         ),
       ),

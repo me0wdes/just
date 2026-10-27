@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import '../../domain/models.dart';
 import '../../platform/feedback_service.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/sync_status_icon.dart';
 import '../../theme/chroma_swap.dart';
 import '../../theme/controls.dart';
 import '../../theme/day_icon.dart';
@@ -553,29 +554,42 @@ class _TaskHomeState extends State<TaskHome> {
     'Синхронизация…',
   }.contains(widget.syncLabel);
 
+  /// Figma «Синхронизация · значок»: the cloud with its status, 40 px,
+  /// beside «Настройки»; the hint says what a tap does.
   Widget syncStatus() {
     final colors = DayColors.of(context);
-    return FluidSurface(
-      enabled: widget.onSync != null,
-      child: InkWell(
-        onTap: widget.onSync,
-        borderRadius: BorderRadius.circular(8),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-          child: Row(
-            children: [
-              DayIcon(DayGlyph.cloud, size: 15, color: colors.icon),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  widget.syncLabel,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodySmall!
-                      .copyWith(color: colors.muted),
-                ),
+    final mark = switch (widget.syncLabel) {
+      'Всё синхронизировано' => SyncMark.done,
+      'Синхронизация…' => SyncMark.busy,
+      _ => SyncMark.error,
+    };
+    final hint = switch (mark) {
+      SyncMark.done => '${widget.syncLabel} · нажмите, чтобы обновить',
+      SyncMark.busy => widget.syncLabel,
+      SyncMark.error => '${widget.syncLabel} · нажмите, чтобы повторить',
+    };
+    return Tooltip(
+      message: hint,
+      child: Semantics(
+        button: true,
+        label: hint,
+        excludeSemantics: true,
+        child: FluidSurface(
+          enabled: widget.onSync != null,
+          pressScale: .92,
+          child: Material(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+            child: InkWell(
+              key: const Key('sidebar-sync'),
+              onTap: widget.onSync,
+              borderRadius: BorderRadius.circular(8),
+              hoverColor: colors.hover,
+              child: SizedBox.square(
+                dimension: 40,
+                child: Center(child: SyncCloud(mark, cutout: colors.screen)),
               ),
-            ],
+            ),
           ),
         ),
       ),
