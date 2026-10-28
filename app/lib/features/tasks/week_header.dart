@@ -122,6 +122,14 @@ class _WeekHeaderState extends State<WeekHeader> {
       setState(() => nextWeek = true);
     }
 
+    // Opening and folding the next week: unhurried and soft, the same on
+    // a phone (down) and a computer (sideways); folding plays it backwards.
+    final weekMotion = MotionTokens.duration(
+      context,
+      const Duration(milliseconds: 380),
+    );
+    const weekCurve = Curves.easeOutCubic;
+
     // Figma «Новые секции · телефон»: weeks stack, a chip opens or folds
     // the next one; «Все задачи» is the total over the current week.
     final body = phone
@@ -137,13 +145,44 @@ class _WeekHeaderState extends State<WeekHeader> {
                 const SizedBox(height: 10),
               ],
               strip(monday),
-              if (dayView && showNext) ...[
-                const SizedBox(height: 8),
-                strip(_plus(monday, 7)),
-              ],
+              // The next week unfolds downwards and the header grows with it.
+              AnimatedSwitcher(
+                duration: weekMotion,
+                switchInCurve: weekCurve,
+                switchOutCurve: weekCurve.flipped,
+                layoutBuilder: (current, previous) => Stack(
+                  alignment: Alignment.topCenter,
+                  children: [...previous, ?current],
+                ),
+                transitionBuilder: (child, animation) => SizeTransition(
+                  alignment: Alignment.topCenter,
+                  sizeFactor: animation,
+                  child: FadeTransition(
+                    opacity: animation,
+                    child: SlideTransition(
+                      position: Tween(
+                        begin: const Offset(0, -.15),
+                        end: Offset.zero,
+                      ).animate(animation),
+                      child: child,
+                    ),
+                  ),
+                ),
+                child: dayView && showNext
+                    ? Padding(
+                        key: const ValueKey('next'),
+                        padding: const EdgeInsets.only(top: 8),
+                        child: strip(_plus(monday, 7)),
+                      )
+                    : const SizedBox(
+                        key: ValueKey('none'),
+                        width: double.infinity,
+                      ),
+              ),
               if (dayView && (showNext || nextCount > 0)) ...[
                 const SizedBox(height: 10),
                 _Chip(
+                  motion: weekMotion,
                   label: showNext
                       ? 'Свернуть'
                       : '+$nextCount на следующей неделе',
@@ -161,10 +200,10 @@ class _WeekHeaderState extends State<WeekHeader> {
               // The next week slides out sideways from behind «+N» and
               // slides back in on ×; the week beside it eases over.
               AnimatedSwitcher(
-                duration: MotionTokens.duration(context, MotionTokens.panel),
-                switchInCurve: MotionTokens.easeOut,
+                duration: weekMotion,
+                switchInCurve: weekCurve,
                 // Played backwards on ×, so flipped: it starts at once and settles.
-                switchOutCurve: MotionTokens.easeOut.flipped,
+                switchOutCurve: weekCurve.flipped,
                 layoutBuilder: (current, previous) => Stack(
                   alignment: Alignment.centerLeft,
                   children: [...previous, ?current],
@@ -709,10 +748,21 @@ class _Total extends StatelessWidget {
 class _Chip extends StatelessWidget {
   final String label;
   final VoidCallback onTap;
-  const _Chip({required this.label, required this.onTap});
+  final Duration motion;
+  const _Chip({
+    required this.label,
+    required this.onTap,
+    this.motion = Duration.zero,
+  });
   @override
   Widget build(BuildContext context) {
     final c = DayColors.of(context);
+    final text = Text(
+      label,
+      key: ValueKey(label),
+      style: Theme.of(context).textTheme.bodyMedium!
+          .copyWith(fontSize: 13, height: 18 / 13, color: c.text),
+    );
     return FluidSurface(
       sound: null,
       child: GestureDetector(
@@ -724,11 +774,23 @@ class _Chip extends StatelessWidget {
             color: c.screen,
             borderRadius: BorderRadius.circular(16),
           ),
-          child: Text(
-            label,
-            style: Theme.of(context).textTheme.bodyMedium!
-                .copyWith(fontSize: 13, height: 18 / 13, color: c.text),
-          ),
+          // «+N на следующей неделе» ↔ «Свернуть»: the chip eases to the
+          // new width while the words cross-fade. AnimatedSize with a zero
+          // duration re-dirties its own layout, so reduced motion skips it.
+          child: motion == Duration.zero
+              ? text
+              : AnimatedSize(
+                  duration: motion,
+                  curve: Curves.easeOutCubic,
+                  child: AnimatedSwitcher(
+                    duration: motion,
+                    // One after the other, never both at once: the old words
+                    // are gone in the first 40 %, the new ones come in after.
+                    switchInCurve: const Interval(.4, 1, curve: Curves.easeOut),
+                    switchOutCurve: const Interval(.6, 1, curve: Curves.easeIn),
+                    child: text,
+                  ),
+                ),
         ),
       ),
     );
