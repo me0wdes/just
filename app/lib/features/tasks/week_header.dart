@@ -171,29 +171,36 @@ class _WeekHeaderState extends State<WeekHeader> {
                 ),
                 // The week keeps its round end while it slides; «+N» only
                 // shows once the week is nearly out of the way.
-                transitionBuilder: (child, animation) => ClipRRect(
-                  borderRadius: BorderRadius.circular(28),
-                  child: SizeTransition(
-                    axis: Axis.horizontal,
-                    alignment: Alignment.centerLeft,
-                    sizeFactor: animation,
-                    child: child.key == const ValueKey('next')
-                        ? SlideTransition(
+                transitionBuilder: (child, animation) =>
+                    child.key == const ValueKey('next')
+                    ? ClipRRect(
+                        borderRadius: BorderRadius.circular(28),
+                        child: SizeTransition(
+                          axis: Axis.horizontal,
+                          alignment: Alignment.centerLeft,
+                          sizeFactor: animation,
+                          child: SlideTransition(
                             position: Tween(
                               begin: const Offset(-.25, 0),
                               end: Offset.zero,
                             ).animate(animation),
                             child: child,
-                          )
-                        : FadeTransition(
-                            opacity: CurvedAnimation(
-                              parent: animation,
-                              curve: const Interval(.6, 1),
-                            ),
-                            child: child,
                           ),
-                  ),
-                ),
+                        ),
+                      )
+                    // «+N» keeps its own oval, so no clip of the week's.
+                    : SizeTransition(
+                        axis: Axis.horizontal,
+                        alignment: Alignment.centerLeft,
+                        sizeFactor: animation,
+                        child: FadeTransition(
+                          opacity: CurvedAnimation(
+                            parent: animation,
+                            curve: const Interval(.6, 1),
+                          ),
+                          child: child,
+                        ),
+                      ),
                 child: Padding(
                   key: ValueKey(showNext ? 'next' : nextCount > 0),
                   // The gap lives inside, so it folds away with the week.
@@ -228,7 +235,10 @@ class _WeekHeaderState extends State<WeekHeader> {
               strip(monday, rows: 3),
             ],
           );
-    final topInset = widget.phone ? MediaQuery.paddingOf(context).top : 0.0;
+    // Figma «Телефон · верх шапки»: 12 under the status bar.
+    final topInset = widget.phone
+        ? MediaQuery.paddingOf(context).top + 12
+        : 0.0;
     return Semantics(
       container: true,
       child: Stack(
@@ -608,7 +618,8 @@ class _MorePillState extends State<_MorePill> {
                   alignment: Alignment.topCenter,
                   decoration: BoxDecoration(
                     color: fill,
-                    borderRadius: BorderRadius.circular(28),
+                    // A true oval: the ends are half the width round.
+                    borderRadius: BorderRadius.circular(19),
                     border: focused
                         ? Border.all(color: DayColors.dark.muted, width: 1.5)
                         : null,
