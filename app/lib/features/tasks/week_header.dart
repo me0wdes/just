@@ -572,12 +572,14 @@ class _MorePillState extends State<_MorePill> {
   @override
   Widget build(BuildContext context) {
     final reduce = MediaQuery.disableAnimationsOf(context);
-    // Light on the sky in either theme, as in Figma.
-    final fill = pressed
-        ? const Color(0x73ffffff)
+    final c = DayColors.of(context);
+    // Figma «Шапка · компьютер»: the screen colour at 60 %, so it reads on
+    // any sky; hover and press firm it up.
+    final opacity = pressed
+        ? .9
         : hovered
-        ? const Color(0x59ffffff)
-        : const Color(0x40ffffff);
+        ? .75
+        : .6;
     return Tooltip(
       message: 'Следующая неделя',
       child: FocusableActionDetector(
@@ -617,11 +619,11 @@ class _MorePillState extends State<_MorePill> {
                   padding: const EdgeInsets.only(top: 29),
                   alignment: Alignment.topCenter,
                   decoration: BoxDecoration(
-                    color: fill,
+                    color: c.screen.withValues(alpha: opacity),
                     // A true oval: the ends are half the width round.
                     borderRadius: BorderRadius.circular(19),
                     border: focused
-                        ? Border.all(color: DayColors.dark.muted, width: 1.5)
+                        ? Border.all(color: c.muted, width: 1.5)
                         : null,
                   ),
                   child: Text(
@@ -629,7 +631,7 @@ class _MorePillState extends State<_MorePill> {
                     style: Theme.of(context).textTheme.bodyMedium!.copyWith(
                       fontSize: 15,
                       height: 18 / 15,
-                      color: DayColors.dark.text,
+                      color: c.text.withValues(alpha: opacity),
                     ),
                   ),
                 ),
