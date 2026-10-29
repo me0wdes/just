@@ -4,6 +4,8 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
+import '../../theme/controls.dart';
+
 import '../../domain/models.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/day_icon.dart';
@@ -133,7 +135,9 @@ class _TaskRowState extends State<TaskRow> {
               // Hover only tints the fill; the 1px border never changes.
               color: widget.selected
                   ? c.track
-                  : hovered || pressed
+                  // A press only tints with a mouse: on touch the held
+                  // card lifts as the same white card, no colour jump.
+                  : hovered || (pressed && !isPhone(context))
                   ? c.hover
                   : c.card,
               borderRadius: BorderRadius.circular(14),

@@ -276,6 +276,13 @@ class _TaskHomeState extends State<TaskHome> {
         animation: animation,
         child: child,
         builder: (context, child) {
+          // Touch, held without moving: the menu's own lifted card takes
+          // over at once, so this copy does not sink back under it.
+          if (!desktopLayout &&
+              animation.status == AnimationStatus.reverse &&
+              pressMoved < 12) {
+            return const SizedBox.shrink();
+          }
           final t = Curves.easeOut.transform(animation.value);
           final from = desktopLayout ? 1.0 : .97,
               to = desktopLayout ? 1.015 : liftScale;

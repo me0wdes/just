@@ -162,9 +162,25 @@ class _WeekHeaderState extends State<WeekHeader> {
               focusNode: monthFocus,
               child: Material(
                 type: MaterialType.transparency,
-                child: SizedBox(
+                child: Container(
                   // Figma: 360 on a computer, the phone's width less 20 a side.
                   width: math.min(MediaQuery.sizeOf(context).width - 40, 360),
+                  // It lies over the list in the screen colour, so in the
+                  // dark theme only an edge and a shadow set it apart.
+                  foregroundDecoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(widget.phone ? 26 : 28),
+                    border: Border.all(color: DayColors.of(context).border),
+                  ),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(widget.phone ? 26 : 28),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x33000000),
+                        blurRadius: 24,
+                        offset: Offset(0, 8),
+                      ),
+                    ],
+                  ),
                   child: ListenableBuilder(
                     listenable: c,
                     builder: (context, _) => _Strip(
@@ -757,8 +773,8 @@ class _Strip extends StatelessWidget {
   }
 }
 
-/// Figma «День» (40×57): the date and up to three dots for its tasks, a
-/// fourth «+» when there are more.
+/// Figma «День» (40×57): the date and up to two dots for its tasks, a
+/// «+» after them when there are more.
 class _Day extends StatelessWidget {
   final LocalDate day;
   final double width;
@@ -863,13 +879,14 @@ class _Dots extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            for (var i = 0; i < tasks.clamp(0, 3); i++) ...[
+            // Figma «dots»: one, two, or two and a plus for more.
+            for (var i = 0; i < tasks.clamp(0, 2); i++) ...[
               if (i > 0) const SizedBox(width: 2),
               dot,
             ],
-            if (tasks > 3) ...[
+            if (tasks > 2) ...[
               const SizedBox(width: 2),
-              // Figma «dots / больше 3»: a 5 px plus, 1.4 thick, muted.
+              // Figma «dots / больше 2»: a 5 px plus, 1.4 thick, muted.
               CustomPaint(size: const Size.square(6), painter: _Plus(plus)),
             ],
           ],
@@ -1010,8 +1027,9 @@ class _Morph extends StatelessWidget {
                     duration: motion,
                     // The old content is gone in the first 40 %, the new
                     // one settles in as the shape does.
+                    // The new content comes in early, so its rise is seen.
                     switchInCurve: const Interval(
-                      .35,
+                      .15,
                       1,
                       curve: Curves.easeOut,
                     ),
@@ -1067,14 +1085,19 @@ class _Progress extends StatelessWidget {
         height: 6,
         color: c.border,
         alignment: Alignment.centerLeft,
-        child: AnimatedFractionallySizedBox(
+        // Fills from empty as the progress appears, then eases to new
+        // values as tasks get done.
+        child: TweenAnimationBuilder<double>(
+          tween: Tween(begin: 0, end: done / total),
           duration: MotionTokens.duration(
             context,
-            const Duration(milliseconds: 380),
+            const Duration(milliseconds: 600),
           ),
           curve: Curves.easeOutCubic,
-          widthFactor: done / total,
-          child: Container(color: c.text),
+          builder: (context, share, _) => FractionallySizedBox(
+            widthFactor: share,
+            child: Container(color: c.text),
+          ),
         ),
       ),
     );
@@ -1082,14 +1105,18 @@ class _Progress extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          all ? 'Всё сделано за неделю' : 'Сделано на этой неделе',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: text.copyWith(fontSize: 15, height: 20 / 15, color: c.muted),
+        // Rises in like the week's days: the words, the bar, the count.
+        FadeUp(
+          index: 0,
+          child: Text(
+            all ? 'Всё сделано за неделю' : 'Сделано на этой неделе',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: text.copyWith(fontSize: 15, height: 20 / 15, color: c.muted),
+          ),
         ),
         const SizedBox(height: 10),
-        bar,
+        FadeUp(index: 2, child: bar),
       ],
     );
     return Semantics(
@@ -1109,22 +1136,25 @@ class _Progress extends StatelessWidget {
           children: [
             Expanded(child: label),
             const SizedBox(width: 20),
-            Text.rich(
-              TextSpan(
-                children: [
-                  TextSpan(
-                    text: '$done',
-                    style: text.copyWith(
-                      fontSize: 32,
-                      height: 38 / 32,
-                      color: c.text,
+            FadeUp(
+              index: 4,
+              child: Text.rich(
+                TextSpan(
+                  children: [
+                    TextSpan(
+                      text: '$done',
+                      style: text.copyWith(
+                        fontSize: 32,
+                        height: 38 / 32,
+                        color: c.text,
+                      ),
                     ),
-                  ),
-                  TextSpan(
-                    text: ' из $total',
-                    style: text.copyWith(fontSize: 20, color: c.muted),
-                  ),
-                ],
+                    TextSpan(
+                      text: ' из $total',
+                      style: text.copyWith(fontSize: 20, color: c.muted),
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
