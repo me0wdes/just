@@ -57,6 +57,10 @@ class _DatePickerState extends State<_DatePicker> {
     final offset = month.weekday - 1;
     final days = DateUtils.getDaysInMonth(month.year, month.month);
     final rows = ((offset + days) / 7).ceil();
+    // Phone: finger-sized days, and the dialog keeps 16 from the edges
+    // like the others (the default 40 left no room for Sunday).
+    final phone = MediaQuery.sizeOf(context).width < 600;
+    final cell = phone ? 44.0 : 40.0;
     Widget arrow(int by, String tip) => DayButton.icon(
       tooltip: tip,
       onPressed: () => shift(by),
@@ -67,8 +71,11 @@ class _DatePickerState extends State<_DatePicker> {
     );
     return Dialog(
       clipBehavior: Clip.antiAlias,
+      insetPadding: phone
+          ? const EdgeInsets.symmetric(horizontal: 16, vertical: 24)
+          : null,
       child: SizedBox(
-        width: 7 * 40 + 32,
+        width: 7 * cell + 32,
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -76,7 +83,7 @@ class _DatePickerState extends State<_DatePicker> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               SizedBox(
-                width: 7 * 40,
+                width: 7 * cell,
                 child: Row(
                   children: [
                     Expanded(
@@ -110,7 +117,7 @@ class _DatePickerState extends State<_DatePicker> {
                     'Вс',
                   ])
                     SizedBox(
-                      width: 40,
+                      width: cell,
                       height: 28,
                       child: Center(
                         child: Text(
@@ -128,10 +135,11 @@ class _DatePickerState extends State<_DatePicker> {
                       () {
                         final day = r * 7 + k - offset + 1;
                         if (day < 1 || day > days) {
-                          return const SizedBox(width: 40, height: 40);
+                          return SizedBox(width: cell, height: cell);
                         }
                         final date = DateTime(month.year, month.month, day);
                         return _DayCell(
+                          size: cell,
                           day: day,
                           selected: date == selected,
                           today: date == today,
@@ -142,7 +150,7 @@ class _DatePickerState extends State<_DatePicker> {
                 ),
               const SizedBox(height: 16),
               SizedBox(
-                width: 7 * 40,
+                width: 7 * cell,
                 child: _Actions(
                   cancel: DayButton(
                     kind: DayButtonKind.ghost,
@@ -165,10 +173,12 @@ class _DatePickerState extends State<_DatePicker> {
 
 /// Figma «День»: plain, today (1 px ring), selected (filled) and hover.
 class _DayCell extends StatelessWidget {
+  final double size;
   final int day;
   final bool selected, today;
   final VoidCallback onTap;
   const _DayCell({
+    this.size = 40,
     required this.day,
     required this.selected,
     required this.today,
@@ -186,8 +196,8 @@ class _DayCell extends StatelessWidget {
           builder: (context) {
             final hover = FluidInteraction.of(context)?.hover ?? 0;
             return Container(
-              width: 40,
-              height: 40,
+              width: size,
+              height: size,
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,

@@ -20,6 +20,9 @@ const _release = Duration(milliseconds: 180),
 const _releaseCurve = Cubic(.23, 1, .32, 1);
 const controlHeight = 36.0;
 
+/// A phone-width window: controls grow to finger size there.
+bool isPhone(BuildContext context) => MediaQuery.sizeOf(context).width < 600;
+
 /// Surface tints relative to the theme: hover and selected overlays.
 Color overlay(BuildContext context, double light, double dark) {
   final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -101,7 +104,7 @@ class _DayButtonState extends State<DayButton> {
     };
     final iconOnly = widget.label == null;
     // Phones get 44 px touch targets; computers keep the 36 px grid.
-    final size = MediaQuery.sizeOf(context).width < 600 ? 44.0 : controlHeight;
+    final size = isPhone(context) ? 44.0 : controlHeight;
     final inset = pressed && !reduce ? 1.0 : 0.0;
     Widget body = Row(
       mainAxisSize: widget.expand ? MainAxisSize.max : MainAxisSize.min,
@@ -226,7 +229,8 @@ class _DayFieldState extends State<DayField> {
     final c = DayColors.of(context);
     final style =
         widget.style ??
-        Theme.of(context).textTheme.bodyMedium!.copyWith(color: c.text);
+        Theme.of(context).textTheme.bodyMedium!
+            .copyWith(color: c.text, fontSize: isPhone(context) ? 16 : null);
     return MouseRegion(
       cursor: SystemMouseCursors.text,
       onEnter: (_) => setState(() => hovered = true),
@@ -235,7 +239,11 @@ class _DayFieldState extends State<DayField> {
         onTap: focus.requestFocus,
         child: AnimatedContainer(
           duration: MotionTokens.duration(context, MotionTokens.fast),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          // Phone: a field about 46 tall, easy to tap into.
+          padding: EdgeInsets.symmetric(
+            horizontal: 10,
+            vertical: isPhone(context) ? 12 : 8,
+          ),
           decoration: BoxDecoration(
             color: focus.hasFocus
                 ? c.card
@@ -422,7 +430,7 @@ class _DaySelectState<T> extends State<DaySelect<T>>
                 value: label,
                 child: AnimatedContainer(
                   duration: MotionTokens.duration(context, MotionTokens.fast),
-                  height: controlHeight,
+                  height: isPhone(context) ? 44 : controlHeight,
                   padding: const EdgeInsets.only(left: 10, right: 8),
                   decoration: BoxDecoration(
                     color: hovered || showing
@@ -480,7 +488,7 @@ class _DaySelectState<T> extends State<DaySelect<T>>
     final c = DayColors.of(context);
     final box = triggerKey.currentContext?.findRenderObject() as RenderBox?;
     final width = (box?.size.width ?? 160).clamp(180.0, 320.0);
-    const row = controlHeight;
+    final phone = isPhone(context), row = phone ? 48.0 : controlHeight;
     final moderate = MotionTokens.duration(context, MotionTokens.moderate);
     final fast = MotionTokens.duration(context, MotionTokens.fast);
     return Stack(
@@ -603,6 +611,9 @@ class _DaySelectState<T> extends State<DaySelect<T>>
                                                       .textTheme
                                                       .bodyMedium!
                                                       .copyWith(
+                                                        fontSize: phone
+                                                            ? 16
+                                                            : null,
                                                         color: c.text,
                                                         fontWeight: i == checked
                                                             ? FontWeight.w600
@@ -770,24 +781,30 @@ class _TouchMenuRoute extends PopupRoute<void> {
               child: AnimatedBuilder(
                 animation: animation,
                 child: preview,
-                builder: (context, child) => Transform.scale(
-                  scale: 1 + .03 * Curves.easeOut.transform(animation.value),
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(14),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(
-                            alpha: .22 * animation.value,
+                builder: (context, child) {
+                  // The held card is already lifted when the menu opens, so
+                  // the preview starts there (1.03, the same shadow) and
+                  // only settles back down as the menu closes.
+                  final t = animation.status == AnimationStatus.reverse
+                      ? Curves.easeOut.transform(animation.value)
+                      : 1.0;
+                  return Transform.scale(
+                    scale: 1 + .03 * t,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(14),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: .18 * t),
+                            blurRadius: 24,
+                            offset: Offset(0, 8 * t),
                           ),
-                          blurRadius: 28,
-                          offset: const Offset(0, 10),
-                        ),
-                      ],
+                        ],
+                      ),
+                      child: child,
                     ),
-                    child: child,
-                  ),
-                ),
+                  );
+                },
               ),
             ),
           ),
@@ -835,8 +852,11 @@ class _MenuRoute extends PopupRoute<void> {
   @override
   Widget buildPage(context, animation, secondaryAnimation) {
     final size = MediaQuery.sizeOf(context);
-    const width = 200.0;
-    final height = items.length * controlHeight + 10;
+    // Phone: the touch menu's finger-sized rows.
+    final phone = isPhone(context);
+    final width = phone ? 250.0 : 200.0,
+        rowHeight = phone ? _TouchMenuRoute.rowHeight : controlHeight;
+    final height = items.length * rowHeight + 10;
     // Keep the panel on screen; flip left/up near the edges.
     final left = position.dx + width > size.width - 8
         ? position.dx - width
@@ -850,7 +870,11 @@ class _MenuRoute extends PopupRoute<void> {
           left: left,
           top: top,
           width: width,
-          child: _MenuPanel(items: items, close: () => Navigator.pop(context)),
+          child: _MenuPanel(
+            items: items,
+            rowHeight: rowHeight,
+            close: () => Navigator.pop(context),
+          ),
         ),
       ],
     );

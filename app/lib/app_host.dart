@@ -197,20 +197,30 @@ class _DayHostState extends State<DayHost> with WidgetsBindingObserver {
             includeCompleted: true,
           ),
         )
-        .listen((tasks) async {
-          try {
-            final report = await reminders.reconcile(tasks);
-            if (mounted && identical(controller, configuredController)) {
-              controller.setReminderFailures(report.failures);
-            }
-          } catch (_) {
-            if (mounted && identical(controller, configuredController)) {
-              controller.setReminderFailures({
-                '*': 'Не удалось обновить системные напоминания. Проверьте настройки уведомлений.',
-              });
-            }
-          }
+        .listen((tasks) {
+          _reminderTasks = tasks;
+          checkReminders();
         });
+  }
+
+  /// The latest tasks, so a return from the system settings can check the
+  /// reminders again without waiting for a task to change.
+  List<TaskItem>? _reminderTasks;
+  Future<void> checkReminders() async {
+    final tasks = _reminderTasks, configuredController = controller;
+    if (tasks == null) return;
+    try {
+      final report = await reminders.reconcile(tasks);
+      if (mounted && identical(controller, configuredController)) {
+        controller.setReminderFailures(report.failures);
+      }
+    } catch (_) {
+      if (mounted && identical(controller, configuredController)) {
+        controller.setReminderFailures({
+          '*': 'Не удалось обновить системные напоминания. Проверьте настройки уведомлений.',
+        });
+      }
+    }
   }
 
   void startSync() {
@@ -272,6 +282,7 @@ class _DayHostState extends State<DayHost> with WidgetsBindingObserver {
   Future<void> activateWorkspace(ConnectionResult result) async {
     await edits?.cancel();
     await taskChanges?.cancel();
+    _reminderTasks = null;
     await stopSync();
     await reminders.drain();
     controller.dispose();
@@ -366,6 +377,8 @@ class _DayHostState extends State<DayHost> with WidgetsBindingObserver {
     // The silent keep-alive runs only while Just is on screen.
     if (state == AppLifecycleState.resumed) {
       checkUpdates();
+      // Back from the settings, notifications may have been switched on.
+      if (controller.reminderFailures.isNotEmpty) checkReminders();
       audio.keepAwake(widget.settings.completionSoundEnabled);
     } else if (state == AppLifecycleState.hidden ||
         state == AppLifecycleState.paused) {

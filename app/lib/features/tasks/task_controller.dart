@@ -45,14 +45,40 @@ class TaskController extends ChangeNotifier {
   /// The day the «Сегодня» view shows.
   LocalDate get day => query.day ?? today();
 
-  /// Open tasks on [date] in the current view (a list keeps its own).
-  int countOn(LocalDate date) => calendar.where((t) {
-    if (!TaskQuery.onDay(t, date, today())) return false;
+  /// The current view's own tasks: a list keeps its own.
+  bool _inView(TaskItem t) {
     if (query.view != TaskView.list) return true;
     return query.listId == inboxId
         ? t.listIds.isEmpty
         : t.listIds.contains(query.listId);
-  }).length;
+  }
+
+  /// Open tasks on [date] in the current view.
+  int countOn(LocalDate date) => calendar
+      .where(
+        (t) => !t.completed && TaskQuery.onDay(t, date, today()) && _inView(t),
+      )
+      .length;
+
+  /// This week's tasks in the current view: how many are done of all of
+  /// them. Open overdue ones count too, they sit on today.
+  ({int done, int total}) weekProgress() {
+    final now = today();
+    final monday = now.utc.subtract(Duration(days: now.utc.weekday - 1));
+    final week = {
+      for (var i = 0; i < 7; i++)
+        monday.add(Duration(days: i)).toIso8601String().substring(0, 10),
+    };
+    bool dated(LocalDate? d) => d != null && week.contains(d.value);
+    final mine = calendar.where(
+      (t) =>
+          _inView(t) &&
+          (dated(t.dueDate) ||
+              dated(t.plannedForDate) ||
+              (!t.completed && TaskQuery.onDay(t, now, now))),
+    );
+    return (done: mine.where((t) => t.completed).length, total: mine.length);
+  }
 
   /// Picks a day in the calendar and stays in the current view. In
   /// «Сегодня» today means no filter; elsewhere the same day again clears it.
@@ -81,9 +107,12 @@ class TaskController extends ChangeNotifier {
   }) : clock = clock ?? DateTime.now {
     query = TaskQuery(today: today(), includeCompleted: true);
     setQuery(query);
-    // Open tasks of every day, for the dots under the week calendar.
+    // Tasks of every day, done too: the dots count the open ones, the
+    // week's progress both.
     _calendar = repository
-        .watchTasks(TaskQuery(view: TaskView.all, today: today()))
+        .watchTasks(
+          TaskQuery(view: TaskView.all, today: today(), includeCompleted: true),
+        )
         .listen((value) {
           calendar = value;
           _notify();
@@ -152,9 +181,9 @@ class TaskController extends ChangeNotifier {
             ? 1024
             : tasks.map((t) => t.position).reduce((a, b) => a > b ? a : b) +
                   1024,
-        // A task added while a day is shown is due on that day.
-        if (query.view == TaskView.today || query.day != null)
-          'dueDate': day.toString(),
+        // Every new task is due on a day: the one picked in the calendar,
+        // otherwise today, so nothing ends up without a date.
+        'dueDate': day.toString(),
       },
     ),
   );

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'controls.dart';
+
 import '../platform/feedback_service.dart';
 import 'app_theme.dart';
 import 'fluid_surface.dart';
@@ -22,7 +24,8 @@ class DaySegments extends StatelessWidget {
     final colors = DayColors.of(context);
     final dark = Theme.of(context).brightness == Brightness.dark;
     return Container(
-      height: 38,
+      // Phone: a 44 px tap target, like the other controls there.
+      height: isPhone(context) ? 44 : 38,
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
         color: colors.track,

@@ -3,8 +3,6 @@ package com.example.day_planner
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
-import android.media.AudioManager
-import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -15,10 +13,9 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "day/platform").setMethodCallHandler { call, result ->
             when (call.method) {
-                "feedbackAllowed" -> {
-                    val audio = getSystemService(Context.AUDIO_SERVICE) as AudioManager
-                    result.success(audio.ringerMode == AudioManager.RINGER_MODE_NORMAL)
-                }
+                // Like a game: tones play in any ringer mode, and the media
+                // volume decides how loud (zero is silent).
+                "feedbackAllowed" -> result.success(true)
                 "hasPackageIdentity" -> result.success(true)
                 "openUrl" -> {
                     startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(call.argument<String>("url"))))

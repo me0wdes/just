@@ -108,28 +108,54 @@ class _SettingsPanelState extends State<SettingsPanel> {
       // A phone gets a full screen of its own with a back arrow; a
       // computer keeps the dialog over the tasks.
       final phone = MediaQuery.sizeOf(context).width < 600;
+      // Figma «Шапка страницы · телефон»: Bold 20 beside the back circle.
       final title = Text(
         'Настройки',
-        style: Theme.of(context).textTheme.titleLarge!
-            .copyWith(fontWeight: FontWeight.w700),
+        style: phone
+            ? Theme.of(context).textTheme.titleLarge!.copyWith(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: colors.text,
+              )
+            : Theme.of(context).textTheme.titleLarge!
+                  .copyWith(fontWeight: FontWeight.w700),
       );
       final header = Padding(
         padding: phone
-            ? const EdgeInsets.fromLTRB(8, 8, 20, 8)
+            ? const EdgeInsets.fromLTRB(8, 14, 10, 12)
             : const EdgeInsets.fromLTRB(20, 14, 10, 12),
         child: Row(
           children: [
             if (phone) ...[
-              FluidIconButton(
-                tooltip: 'Назад',
+              // Like the lists button in the header: a 44 px circle with a
+              // 20 px icon, here on the track colour so it shows on the
+              // white page.
+              FluidSurface(
                 sound: null,
-                onPressed: () => Navigator.pop(context),
-                icon: const RotatedBox(
-                  quarterTurns: 1,
-                  child: DayIcon(DayGlyph.down, size: 22),
+                pressScale: .9,
+                child: Tooltip(
+                  message: 'Назад',
+                  child: InkResponse(
+                    key: const Key('settings-back'),
+                    onTap: () => Navigator.pop(context),
+                    radius: 24,
+                    child: Container(
+                      width: 44,
+                      height: 44,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: colors.track,
+                        shape: BoxShape.circle,
+                      ),
+                      child: CustomPaint(
+                        size: const Size.square(20),
+                        painter: _BackChevron(colors.text),
+                      ),
+                    ),
+                  ),
                 ),
               ),
-              const SizedBox(width: 4),
+              const SizedBox(width: 12),
             ],
             Expanded(child: title),
             if (!phone)
@@ -345,4 +371,30 @@ class _SettingsPanelState extends State<SettingsPanel> {
             );
     },
   );
+}
+
+/// Figma «icon/back»: a chevron that fills its 20 px box (7×14), unlike the
+/// down chevron, which only uses half of it.
+class _BackChevron extends CustomPainter {
+  final Color color;
+  const _BackChevron(this.color);
+  @override
+  void paint(Canvas canvas, Size size) {
+    final k = size.width / 20;
+    canvas.drawPath(
+      Path()
+        ..moveTo(13 * k, 3 * k)
+        ..lineTo(6 * k, 10 * k)
+        ..lineTo(13 * k, 17 * k),
+      Paint()
+        ..color = color
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2 * k
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_BackChevron old) => old.color != color;
 }

@@ -1,9 +1,8 @@
-import '../../theme/fluid_button.dart';
-
 import 'package:flutter/material.dart';
 
 import '../../data/backup_repository.dart';
 import '../../sync/protocol.dart';
+import '../../theme/app_theme.dart';
 import '../../theme/controls.dart';
 
 class SyncConflicts extends StatefulWidget {
@@ -32,9 +31,13 @@ class _SyncConflictsState extends State<SyncConflicts> {
       await widget.backups.createSafetyBackup();
       await widget.backups.repository.resolveRejected(id, retry: retry);
       if (mounted) {
-        setState(
-          () => problems = widget.backups.repository.rejectedOperations(),
-        );
+        final left = widget.backups.repository.rejectedOperations();
+        setState(() {
+          problems = left;
+        });
+        // Figma: no «Готово»; the dialog goes once the last one is settled.
+        final rest = await left;
+        if (rest.isEmpty && mounted) Navigator.pop(context);
       }
     } catch (e) {
       if (mounted) {
@@ -85,34 +88,46 @@ class _SyncConflictsState extends State<SyncConflicts> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        problem['label'] as String,
-                        style: Theme.of(context).textTheme.titleMedium,
+                      _Record(
+                        type: problem['entityType'] as String?,
+                        title: problem['label'] as String,
                       ),
+                      const SizedBox(height: 8),
                       Text(reason(problem['code'])),
-                      Wrap(
-                        spacing: 8,
-                        children: [
-                          FluidButton.text(
-                            onPressed: busy
-                                ? null
-                                : () => resolve(
-                                    problem['operationId'] as String,
-                                    true,
-                                  ),
-                            child: const Text('Оставить локальную версию'),
-                          ),
-                          FluidButton.text(
-                            onPressed: busy
-                                ? null
-                                : () => resolve(
-                                    problem['operationId'] as String,
-                                    false,
-                                  ),
-                            child: const Text('Взять версию сервера'),
-                          ),
-                        ],
-                      ),
+                      const SizedBox(height: 12),
+                      // Figma «Конфликт синхронизации»: two grey buttons,
+                      // stacked on a phone, halves of a row on a computer.
+                      () {
+                        final id = problem['operationId'] as String;
+                        final local = DayButton(
+                          kind: DayButtonKind.secondary,
+                          expand: true,
+                          onPressed: busy ? null : () => resolve(id, true),
+                          label: const Text('Локальная версия'),
+                        );
+                        final server = DayButton(
+                          kind: DayButtonKind.secondary,
+                          expand: true,
+                          onPressed: busy ? null : () => resolve(id, false),
+                          label: const Text('Версия сервера'),
+                        );
+                        return isPhone(context)
+                            ? Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  local,
+                                  const SizedBox(height: 8),
+                                  server,
+                                ],
+                              )
+                            : Row(
+                                children: [
+                                  Expanded(child: local),
+                                  const SizedBox(width: 8),
+                                  Expanded(child: server),
+                                ],
+                              );
+                      }(),
                     ],
                   ),
                 ),
@@ -126,12 +141,43 @@ class _SyncConflictsState extends State<SyncConflicts> {
         },
       ),
     ),
-    actions: [
-      DayButton(
-        kind: DayButtonKind.primary,
-        onPressed: busy ? null : () => Navigator.pop(context),
-        label: const Text('Готово'),
-      ),
-    ],
   );
+}
+
+/// Figma «Запись конфликта»: the record a change belongs to, on a card,
+/// its kind above the name so it reads as «this task» (or list, or repeat).
+class _Record extends StatelessWidget {
+  final String? type;
+  final String title;
+  const _Record({required this.type, required this.title});
+  @override
+  Widget build(BuildContext context) {
+    final c = DayColors.of(context);
+    final text = Theme.of(context).textTheme;
+    final kind = switch (type) {
+      'list' => 'Список',
+      'rule' => 'Повтор',
+      _ => 'Задача',
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: c.card,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: c.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(kind, style: text.bodySmall!.copyWith(color: c.muted)),
+          Text(
+            title,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: text.bodyLarge!.copyWith(color: c.text),
+          ),
+        ],
+      ),
+    );
+  }
 }

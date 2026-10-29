@@ -1,4 +1,7 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../domain/models.dart';
 import '../../platform/feedback_service.dart';
@@ -25,6 +28,20 @@ const _months = [
   'октября',
   'ноября',
   'декабря',
+];
+const _monthNames = [
+  'Январь',
+  'Февраль',
+  'Март',
+  'Апрель',
+  'Май',
+  'Июнь',
+  'Июль',
+  'Август',
+  'Сентябрь',
+  'Октябрь',
+  'Ноябрь',
+  'Декабрь',
 ];
 const _weekdays = [
   'Понедельник',
@@ -60,7 +77,8 @@ LocalDate _monday(LocalDate d) => _plus(d, 1 - d.utc.weekday);
 
 /// Figma «Новые секции»: the live field with a week calendar. «Сегодня»
 /// shows an island with the picked day over the week, «+N» opens the next
-/// one; other views show their total next to three weeks.
+/// one. Other views (Figma «Шапка · все задачи · 12») show their total in
+/// the island, which drops the month down, and the week's progress.
 class WeekHeader extends StatefulWidget {
   final TaskController controller;
   final bool phone;
@@ -78,11 +96,104 @@ class WeekHeader extends StatefulWidget {
 
 class _WeekHeaderState extends State<WeekHeader> {
   bool nextWeek = false;
+  // The month the island drops down over the screen, phone and computer
+  // alike.
+  final monthDrop = OverlayPortalController();
+  final anchor = LayerLink();
+  final monthFocus = FocusNode(debugLabel: 'Календарь месяца');
+  DateTime month = DateTime.utc(2000);
+
+  @override
+  void dispose() {
+    monthFocus.dispose();
+    super.dispose();
+  }
+
   TaskController get c => widget.controller;
 
   void pick(LocalDate day) {
     DaySound.play(context, UiSound.nav);
     c.selectDay(day);
+  }
+
+  void toggleMonth() {
+    if (monthDrop.isShowing) return closeMonth();
+    DaySound.play(context, UiSound.open);
+    final from = (c.query.day ?? c.today()).utc;
+    setState(() {
+      month = DateTime.utc(from.year, from.month);
+      monthDrop.show();
+    });
+    // The screen already holds focus, so Esc needs it handed over.
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => monthFocus.requestFocus(),
+    );
+  }
+
+  void closeMonth() {
+    if (!monthDrop.isShowing) return;
+    DaySound.play(context, UiSound.close);
+    setState(monthDrop.hide);
+  }
+
+  /// Figma «Календарь · выпадающее окно»: the month on the day pill, under
+  /// the island; a tap outside or Esc folds it, a picked day too.
+  Widget monthDropdown(BuildContext context) {
+    final first = LocalDate.parse(month.toIso8601String().substring(0, 10));
+    final length = DateUtils.getDaysInMonth(month.year, month.month);
+    final rows = ((first.utc.weekday - 1 + length) / 7).ceil();
+    final start = _monday(first);
+    return Align(
+      alignment: Alignment.topLeft,
+      child: CompositedTransformFollower(
+        link: anchor,
+        showWhenUnlinked: false,
+        targetAnchor: Alignment.bottomCenter,
+        followerAnchor: Alignment.topCenter,
+        offset: const Offset(0, 8),
+        child: TapRegion(
+          groupId: anchor,
+          onTapOutside: (_) => closeMonth(),
+          child: CallbackShortcuts(
+            bindings: {
+              const SingleActivator(LogicalKeyboardKey.escape): closeMonth,
+            },
+            child: Focus(
+              focusNode: monthFocus,
+              child: Material(
+                type: MaterialType.transparency,
+                child: SizedBox(
+                  // Figma: 360 on a computer, the phone's width less 20 a side.
+                  width: math.min(MediaQuery.sizeOf(context).width - 40, 360),
+                  child: ListenableBuilder(
+                    listenable: c,
+                    builder: (context, _) => _Strip(
+                      days: [
+                        for (var i = 0; i < 7 * rows; i++) _plus(start, i),
+                      ],
+                      today: c.today(),
+                      picked: c.query.day,
+                      count: c.countOn,
+                      onPick: (day) {
+                        setState(monthDrop.hide);
+                        pick(day);
+                      },
+                      onClose: null,
+                      phone: widget.phone,
+                      month: month,
+                      onShift: (by) => setState(
+                        () =>
+                            month = DateTime.utc(month.year, month.month + by),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -102,17 +213,45 @@ class _WeekHeaderState extends State<WeekHeader> {
         : c.query.view == TaskView.all
         ? 'Всего'
         : c.heading;
-    Widget strip(LocalDate start, {VoidCallback? onClose, int rows = 1}) =>
+    final progress = c.weekProgress();
+    final openCount = c.tasks.where((t) => !t.completed).length;
+    final count =
+        '$openCount ${_plural(openCount, 'задача', 'задачи', 'задач')}';
+    // «Сегодня, 28 октября»; «Всего 6 задач», «Работа · 6 задач»; true
+    // marks the muted part.
+    final island = dayView
+        ? [
+            (dayName(picked, today), false),
+            (', ${picked.utc.day} ${_months[picked.utc.month - 1]}', true),
+          ]
+        : [
+            (totalLabel + (totalLabel == 'Всего' ? ' ' : ' · '), true),
+            (count, false),
+          ];
+    Widget strip(LocalDate start, {VoidCallback? onClose, bool bare = false}) =>
         _Strip(
-          days: [for (var i = 0; i < 7 * rows; i++) _plus(start, i)],
+          days: [for (var i = 0; i < 7; i++) _plus(start, i)],
           today: today,
-          picked: dayView ? picked : c.query.day,
+          picked: picked,
           count: c.countOn,
           onPick: pick,
           onClose: onClose,
-          attached: !dayView && !phone,
           phone: phone,
+          bare: bare,
         );
+    // One pill for every view: the week in «Сегодня» flows into the
+    // week's progress elsewhere and back. No tasks this week, no pill.
+    final hidePill = !dayView && progress.total == 0;
+    final pill = _Morph(
+      swapKey: dayView ? 'week' : (hidePill ? 'none' : 'progress'),
+      phone: phone,
+      hidden: hidePill,
+      child: dayView
+          ? strip(monday, bare: true)
+          : hidePill
+          ? const SizedBox.shrink()
+          : _Progress(done: progress.done, total: progress.total, phone: phone),
+    );
     void fold() => setState(() {
       nextWeek = false;
       if (picked.utc.difference(monday.utc).inDays >= 7) c.selectDay(today);
@@ -131,54 +270,47 @@ class _WeekHeaderState extends State<WeekHeader> {
     const weekCurve = Curves.easeOutCubic;
 
     // Figma «Новые секции · телефон»: weeks stack, a chip opens or folds
-    // the next one; «Все задачи» is the total over the current week.
+    // the next one.
     final body = phone
         ? Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (!dayView) ...[
-                _Total(
-                  label: totalLabel,
-                  count: c.tasks.where((t) => !t.completed).length,
-                  phone: true,
-                ),
-                const SizedBox(height: 10),
-              ],
-              strip(monday),
-              // The next week unfolds downwards and the header grows with it.
-              AnimatedSwitcher(
-                duration: weekMotion,
-                switchInCurve: weekCurve,
-                switchOutCurve: weekCurve.flipped,
-                layoutBuilder: (current, previous) => Stack(
-                  alignment: Alignment.topCenter,
-                  children: [...previous, ?current],
-                ),
-                transitionBuilder: (child, animation) => SizeTransition(
-                  alignment: Alignment.topCenter,
-                  sizeFactor: animation,
-                  child: FadeTransition(
-                    opacity: animation,
-                    child: SlideTransition(
-                      position: Tween(
-                        begin: const Offset(0, -.15),
-                        end: Offset.zero,
-                      ).animate(animation),
-                      child: child,
+              pill,
+              if (dayView)
+                // The next week unfolds downwards and the header grows with it.
+                AnimatedSwitcher(
+                  duration: weekMotion,
+                  switchInCurve: weekCurve,
+                  switchOutCurve: weekCurve.flipped,
+                  layoutBuilder: (current, previous) => Stack(
+                    alignment: Alignment.topCenter,
+                    children: [...previous, ?current],
+                  ),
+                  transitionBuilder: (child, animation) => SizeTransition(
+                    alignment: Alignment.topCenter,
+                    sizeFactor: animation,
+                    child: FadeTransition(
+                      opacity: animation,
+                      child: SlideTransition(
+                        position: Tween(
+                          begin: const Offset(0, -.15),
+                          end: Offset.zero,
+                        ).animate(animation),
+                        child: child,
+                      ),
                     ),
                   ),
+                  child: showNext
+                      ? Padding(
+                          key: const ValueKey('next'),
+                          padding: const EdgeInsets.only(top: 8),
+                          child: strip(_plus(monday, 7)),
+                        )
+                      : const SizedBox(
+                          key: ValueKey('none'),
+                          width: double.infinity,
+                        ),
                 ),
-                child: dayView && showNext
-                    ? Padding(
-                        key: const ValueKey('next'),
-                        padding: const EdgeInsets.only(top: 8),
-                        child: strip(_plus(monday, 7)),
-                      )
-                    : const SizedBox(
-                        key: ValueKey('none'),
-                        width: double.infinity,
-                      ),
-              ),
               if (dayView && (showNext || nextCount > 0)) ...[
                 const SizedBox(height: 10),
                 _Chip(
@@ -191,87 +323,68 @@ class _WeekHeaderState extends State<WeekHeader> {
               ],
             ],
           )
-        : dayView
-        ? Wrap(
+        : Wrap(
             alignment: WrapAlignment.center,
             runSpacing: 7,
             children: [
-              strip(monday),
+              pill,
               // The next week slides out sideways from behind «+N» and
               // slides back in on ×; the week beside it eases over.
-              AnimatedSwitcher(
-                duration: weekMotion,
-                switchInCurve: weekCurve,
-                // Played backwards on ×, so flipped: it starts at once and settles.
-                switchOutCurve: weekCurve.flipped,
-                layoutBuilder: (current, previous) => Stack(
-                  alignment: Alignment.centerLeft,
-                  children: [...previous, ?current],
-                ),
-                // The week keeps its round end while it slides; «+N» only
-                // shows once the week is nearly out of the way.
-                transitionBuilder: (child, animation) =>
-                    child.key == const ValueKey('next')
-                    ? ClipRRect(
-                        borderRadius: BorderRadius.circular(28),
-                        child: SizeTransition(
+              if (dayView)
+                AnimatedSwitcher(
+                  duration: weekMotion,
+                  switchInCurve: weekCurve,
+                  // Played backwards on ×, so flipped: it starts at once and settles.
+                  switchOutCurve: weekCurve.flipped,
+                  layoutBuilder: (current, previous) => Stack(
+                    alignment: Alignment.centerLeft,
+                    children: [...previous, ?current],
+                  ),
+                  // The week keeps its round end while it slides; «+N» only
+                  // shows once the week is nearly out of the way.
+                  transitionBuilder: (child, animation) =>
+                      child.key == const ValueKey('next')
+                      ? ClipRRect(
+                          borderRadius: BorderRadius.circular(28),
+                          child: SizeTransition(
+                            axis: Axis.horizontal,
+                            alignment: Alignment.centerLeft,
+                            sizeFactor: animation,
+                            child: SlideTransition(
+                              position: Tween(
+                                begin: const Offset(-.25, 0),
+                                end: Offset.zero,
+                              ).animate(animation),
+                              child: child,
+                            ),
+                          ),
+                        )
+                      // «+N» keeps its own oval, so no clip of the week's.
+                      : SizeTransition(
                           axis: Axis.horizontal,
                           alignment: Alignment.centerLeft,
                           sizeFactor: animation,
-                          child: SlideTransition(
-                            position: Tween(
-                              begin: const Offset(-.25, 0),
-                              end: Offset.zero,
-                            ).animate(animation),
+                          child: FadeTransition(
+                            opacity: CurvedAnimation(
+                              parent: animation,
+                              curve: const Interval(.6, 1),
+                            ),
                             child: child,
                           ),
                         ),
-                      )
-                    // «+N» keeps its own oval, so no clip of the week's.
-                    : SizeTransition(
-                        axis: Axis.horizontal,
-                        alignment: Alignment.centerLeft,
-                        sizeFactor: animation,
-                        child: FadeTransition(
-                          opacity: CurvedAnimation(
-                            parent: animation,
-                            curve: const Interval(.6, 1),
-                          ),
-                          child: child,
-                        ),
-                      ),
-                child: Padding(
-                  key: ValueKey(showNext ? 'next' : nextCount > 0),
-                  // The gap lives inside, so it folds away with the week.
-                  padding: EdgeInsets.only(
-                    left: showNext || nextCount > 0 ? 7 : 0,
-                  ),
-                  child: showNext
-                      ? strip(_plus(monday, 7), onClose: fold)
-                      : nextCount > 0
-                      ? _MorePill(count: nextCount, onTap: open)
-                      : const SizedBox.shrink(),
-                ),
-              ),
-            ],
-          )
-        : Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Figma: 524 wide; narrower windows shrink it, the weeks stay.
-              Flexible(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 524),
-                  child: _Total(
-                    label: totalLabel,
-                    count: c.tasks.where((t) => !t.completed).length,
-                    phone: false,
+                  child: Padding(
+                    key: ValueKey(showNext ? 'next' : nextCount > 0),
+                    // The gap lives inside, so it folds away with the week.
+                    padding: EdgeInsets.only(
+                      left: showNext || nextCount > 0 ? 7 : 0,
+                    ),
+                    child: showNext
+                        ? strip(_plus(monday, 7), onClose: fold)
+                        : nextCount > 0
+                        ? _MorePill(count: nextCount, onTap: open)
+                        : const SizedBox.shrink(),
                   ),
                 ),
-              ),
-              const SizedBox(width: 16),
-              strip(monday, rows: 3),
             ],
           );
     // Figma «Телефон · верх шапки»: 12 under the status bar.
@@ -301,34 +414,48 @@ class _WeekHeaderState extends State<WeekHeader> {
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
+                // A computer keeps the pill at the bottom of the field.
+                mainAxisAlignment: phone
+                    ? MainAxisAlignment.start
+                    : MainAxisAlignment.spaceBetween,
                 children: [
-                  if (widget.top != null || dayView)
-                    ConstrainedBox(
-                      constraints: BoxConstraints(
-                        minHeight: widget.phone ? 48 : 44,
-                      ),
-                      child: Stack(
-                        alignment: Alignment.topCenter,
-                        children: [
-                          if (widget.top != null)
-                            Align(
-                              alignment: Alignment.centerLeft,
-                              child: widget.top,
-                            ),
-                          if (dayView)
-                            _Island(
-                              day: picked,
-                              today: today,
-                              phone: widget.phone,
-                            ),
-                        ],
-                      ),
+                  ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minHeight: widget.phone ? 48 : 44,
                     ),
-                  SizedBox(
-                    height: widget.phone
-                        ? (dayView ? 16 : 8)
-                        : (dayView ? 91 : 0),
+                    child: Stack(
+                      alignment: Alignment.topCenter,
+                      children: [
+                        if (widget.top != null)
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: widget.top,
+                          ),
+                        // One island for every view, so switching them
+                        // eases its width and blurs the words over.
+                        CompositedTransformTarget(
+                          link: anchor,
+                          child: OverlayPortal(
+                            controller: monthDrop,
+                            overlayChildBuilder: monthDropdown,
+                            child: TapRegion(
+                              groupId: anchor,
+                              child: _Island(
+                                parts: island,
+                                swapKey: dayView
+                                    ? picked
+                                    : '$totalLabel$openCount',
+                                open: monthDrop.isShowing,
+                                phone: widget.phone,
+                                onTap: dayView ? null : toggleMonth,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
+                  SizedBox(height: widget.phone ? 16 : 7),
                   body,
                 ],
               ),
@@ -340,60 +467,130 @@ class _WeekHeaderState extends State<WeekHeader> {
   }
 }
 
-/// The island at the top edge: the picked day, growing and shrinking
-/// smoothly with its text.
-class _Island extends StatelessWidget {
-  final LocalDate day, today;
-  final bool phone;
-  const _Island({required this.day, required this.today, this.phone = false});
+/// The island at the top edge: the picked day in «Сегодня», the total
+/// elsewhere, where a tap drops the month down. It grows and shrinks
+/// smoothly with its words.
+class _Island extends StatefulWidget {
+  final List<(String, bool)> parts;
+  final Object swapKey;
+  final bool open, phone;
+  final VoidCallback? onTap;
+  const _Island({
+    required this.parts,
+    required this.swapKey,
+    required this.open,
+    required this.phone,
+    required this.onTap,
+  });
+  @override
+  State<_Island> createState() => _IslandState();
+}
+
+class _IslandState extends State<_Island> {
+  bool focused = false;
   @override
   Widget build(BuildContext context) {
     final c = DayColors.of(context);
     final style = Theme.of(context).textTheme.bodyMedium!
         .copyWith(fontSize: 15, height: 20 / 15);
-    final d = day.utc;
-    final text = Text.rich(
-      TextSpan(
-        children: [
-          TextSpan(
-            text: dayName(day, today),
-            style: style.copyWith(color: c.text),
+    final tap = widget.onTap;
+    final words = widget.parts.map((p) => p.$1).join();
+    final reduce = MediaQuery.disableAnimationsOf(context);
+    final content = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Flexible(
+          child: BlurSwap(
+            swapKey: widget.swapKey,
+            child: Text.rich(
+              TextSpan(
+                children: [
+                  for (final (text, muted) in widget.parts)
+                    TextSpan(
+                      text: text,
+                      style: style.copyWith(color: muted ? c.muted : c.text),
+                    ),
+                ],
+              ),
+              key: ValueKey(widget.swapKey),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
-          TextSpan(
-            text: ', ${d.day} ${_months[d.month - 1]}',
-            style: style.copyWith(color: c.muted),
+        ),
+        if (tap != null) ...[
+          const SizedBox(width: 8),
+          AnimatedRotation(
+            turns: widget.open ? .5 : 0,
+            duration: reduce
+                ? Duration.zero
+                : const Duration(milliseconds: 200),
+            curve: Curves.easeOutCubic,
+            child: DayIcon(DayGlyph.down, size: 16, color: c.muted),
           ),
         ],
-      ),
-      key: ValueKey(day),
-      maxLines: 1,
+      ],
     );
-    final reduce = MediaQuery.disableAnimationsOf(context);
-    return Container(
-      // On a phone it sits under the status bar, so it rounds all over.
-      padding: EdgeInsets.symmetric(horizontal: phone ? 20 : 24, vertical: 12),
-      decoration: BoxDecoration(
-        color: c.screen,
-        borderRadius: phone
-            ? BorderRadius.circular(22)
-            : const BorderRadius.vertical(bottom: Radius.circular(24)),
-      ),
-      // The width follows the new day while the text swaps through a blur.
-      // AnimatedSize with a zero duration re-dirties its own layout, so
-      // reduced motion skips it.
-      child: reduce
-          ? text
-          : AnimatedSize(
-              duration: const Duration(milliseconds: 680),
-              curve: const Cubic(.22, 1, .36, 1),
-              child: BlurSwap(swapKey: day, child: text),
+    return FocusableActionDetector(
+      enabled: tap != null,
+      mouseCursor: tap == null ? MouseCursor.defer : SystemMouseCursors.click,
+      onShowFocusHighlight: (v) => setState(() => focused = v),
+      actions: {
+        ActivateIntent: CallbackAction<ActivateIntent>(
+          onInvoke: (_) {
+            tap?.call();
+            return null;
+          },
+        ),
+      },
+      child: Semantics(
+        button: tap != null,
+        expanded: tap == null ? null : widget.open,
+        label: tap == null ? words : '$words, календарь месяца',
+        excludeSemantics: true,
+        child: FluidSurface(
+          enabled: tap != null,
+          sound: null,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: tap,
+            child: Container(
+              // A long list name ends in «…» rather than under the menu.
+              constraints: BoxConstraints(maxWidth: widget.phone ? 240 : 520),
+              // On a phone it sits under the status bar, so it rounds all over.
+              padding: EdgeInsets.symmetric(
+                horizontal: widget.phone ? 20 : 24,
+                vertical: 12,
+              ),
+              decoration: BoxDecoration(
+                color: c.screen,
+                borderRadius: widget.phone
+                    ? BorderRadius.circular(22)
+                    : const BorderRadius.vertical(bottom: Radius.circular(24)),
+                border: focused && tap != null
+                    ? Border.all(color: c.muted, width: 1.5)
+                    : null,
+              ),
+              // The width follows the new words while they swap through a
+              // blur. AnimatedSize with a zero duration re-dirties its own
+              // layout, so reduced motion skips it.
+              child: reduce
+                  ? content
+                  : AnimatedSize(
+                      duration: const Duration(milliseconds: 680),
+                      curve: const Cubic(.22, 1, .36, 1),
+                      child: content,
+                    ),
             ),
+          ),
+        ),
+      ),
     );
   }
 }
 
-/// A week (or three) of days on a pill; [attached] hangs it from the top
-/// edge as in the «Все задачи» header.
+/// A week of days on a pill; with [month] the whole month under its name,
+/// arrows and weekdays, the days of other months faded.
 class _Strip extends StatelessWidget {
   final List<LocalDate> days;
   final LocalDate today;
@@ -401,8 +598,14 @@ class _Strip extends StatelessWidget {
   final int Function(LocalDate) count;
   final ValueChanged<LocalDate> onPick;
   final VoidCallback? onClose;
-  final bool attached, phone;
+  final bool phone;
+  final DateTime? month;
+  final ValueChanged<int>? onShift;
+
+  /// Inside [_Morph], which draws the pill itself.
+  final bool bare;
   const _Strip({
+    this.bare = false,
     this.phone = false,
     required this.days,
     required this.today,
@@ -410,7 +613,8 @@ class _Strip extends StatelessWidget {
     required this.count,
     required this.onPick,
     required this.onClose,
-    required this.attached,
+    this.month,
+    this.onShift,
   });
   @override
   Widget build(BuildContext context) {
@@ -429,17 +633,89 @@ class _Strip extends StatelessWidget {
         // whole width; on a computer they stay 40 px.
         final cell = ((room - 6 * gap) / 7).clamp(30.0, phone ? 80.0 : 40.0);
         final radius = phone ? 26.0 : 28.0;
+        final month = this.month,
+            text = Theme.of(context).textTheme.bodyMedium!;
+        Widget arrow(int by, String tip) => DayButton.icon(
+          tooltip: tip,
+          onPressed: () => onShift!(by),
+          icon: RotatedBox(
+            quarterTurns: by < 0 ? 1 : 3,
+            child: DayIcon(DayGlyph.down, size: 16, color: c.muted),
+          ),
+        );
         return Container(
           padding: EdgeInsets.all(pad),
-          decoration: BoxDecoration(
-            color: c.screen,
-            borderRadius: attached
-                ? BorderRadius.vertical(bottom: Radius.circular(radius))
-                : BorderRadius.circular(radius),
-          ),
+          decoration: bare
+              ? null
+              : BoxDecoration(
+                  color: c.screen,
+                  borderRadius: BorderRadius.circular(radius),
+                  boxShadow: month == null
+                      ? null
+                      : const [
+                          BoxShadow(
+                            color: Color(0x1f000000),
+                            blurRadius: 24,
+                            offset: Offset(0, 8),
+                          ),
+                        ],
+                ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              if (month != null) ...[
+                Padding(
+                  padding: const EdgeInsets.only(left: 12),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '${_monthNames[month.month - 1]} ${month.year}',
+                          style: text.copyWith(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                            color: c.text,
+                          ),
+                        ),
+                      ),
+                      arrow(-1, 'Прошлый месяц'),
+                      arrow(1, 'Следующий месяц'),
+                    ],
+                  ),
+                ),
+                SizedBox(height: gap),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (final (k, w) in const [
+                      'Пн',
+                      'Вт',
+                      'Ср',
+                      'Чт',
+                      'Пт',
+                      'Сб',
+                      'Вс',
+                    ].indexed) ...[
+                      if (k > 0) SizedBox(width: gap),
+                      SizedBox(
+                        width: cell,
+                        height: 20,
+                        child: Center(
+                          child: Text(
+                            w,
+                            style: text.copyWith(
+                              fontSize: 13,
+                              height: 18 / 13,
+                              color: c.muted,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                SizedBox(height: gap),
+              ],
               for (final (i, row) in rows.indexed) ...[
                 if (i > 0) SizedBox(height: gap),
                 Row(
@@ -455,6 +731,8 @@ class _Strip extends StatelessWidget {
                           width: cell,
                           picked: day == picked,
                           today: day == today && day != picked,
+                          outside:
+                              month != null && day.utc.month != month.month,
                           tasks: count(day),
                           onTap: () => onPick(day),
                         ),
@@ -484,7 +762,7 @@ class _Strip extends StatelessWidget {
 class _Day extends StatelessWidget {
   final LocalDate day;
   final double width;
-  final bool picked, today;
+  final bool picked, today, outside;
   final int tasks;
   final VoidCallback onTap;
   const _Day({
@@ -492,13 +770,19 @@ class _Day extends StatelessWidget {
     required this.width,
     required this.picked,
     required this.today,
+    this.outside = false,
     required this.tasks,
     required this.onTap,
   });
   @override
   Widget build(BuildContext context) {
     final c = DayColors.of(context);
-    final ink = picked ? c.screen : c.text;
+    // Figma: another month's day at 35 %.
+    final ink = picked
+        ? c.screen
+        : outside
+        ? c.text.withValues(alpha: .35)
+        : c.text;
     return Semantics(
       button: true,
       selected: picked,
@@ -683,62 +967,168 @@ class _MorePillState extends State<_MorePill> {
   }
 }
 
-/// «Всего · 14 задач» hanging from the top edge.
-class _Total extends StatelessWidget {
-  final String label;
-  final int count;
+/// The pill under the island: one dark shape for every view that eases to
+/// its new size while the week and the progress cross-fade inside, so
+/// switching views flows instead of building a new pill.
+class _Morph extends StatelessWidget {
+  final Object swapKey;
+  final bool phone, hidden;
+  final Widget child;
+  const _Morph({
+    required this.swapKey,
+    required this.phone,
+    required this.hidden,
+    required this.child,
+  });
+  @override
+  Widget build(BuildContext context) {
+    final c = DayColors.of(context);
+    final motion = MotionTokens.duration(
+      context,
+      const Duration(milliseconds: 380),
+    );
+    final content = KeyedSubtree(key: ValueKey(swapKey), child: child);
+    return LayoutBuilder(
+      builder: (context, box) => AnimatedOpacity(
+        opacity: hidden ? 0 : 1,
+        duration: motion,
+        child: Container(
+          key: const Key('header-pill'),
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            color: c.screen,
+            borderRadius: BorderRadius.circular(phone ? 26 : 28),
+          ),
+          // AnimatedSize with a zero duration re-dirties its own layout,
+          // so reduced motion skips it.
+          child: motion == Duration.zero
+              ? content
+              : AnimatedSize(
+                  duration: motion,
+                  curve: Curves.easeOutCubic,
+                  child: AnimatedSwitcher(
+                    duration: motion,
+                    // The old content is gone in the first 40 %, the new
+                    // one settles in as the shape does.
+                    switchInCurve: const Interval(
+                      .35,
+                      1,
+                      curve: Curves.easeOut,
+                    ),
+                    switchOutCurve: const Interval(.6, 1, curve: Curves.easeIn),
+                    // Only the new content sizes the pill; the old one keeps
+                    // its own size underneath and is clipped by the shape.
+                    layoutBuilder: (current, previous) => Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        for (final p in previous)
+                          Positioned.fill(
+                            child: OverflowBox(
+                              minWidth: 0,
+                              minHeight: 0,
+                              maxWidth: box.maxWidth,
+                              maxHeight: double.infinity,
+                              child: p,
+                            ),
+                          ),
+                        ?current,
+                      ],
+                    ),
+                    child: content,
+                  ),
+                ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Figma «Прогресс недели»: done this week of all this week's tasks, with
+/// a thin bar. The week's size, so the pill keeps its shape between views:
+/// 360×77 on a computer, the full width and 73 tall on a phone.
+class _Progress extends StatelessWidget {
+  final int done, total;
   final bool phone;
-  const _Total({required this.label, required this.count, required this.phone});
+  const _Progress({
+    required this.done,
+    required this.total,
+    required this.phone,
+  });
   @override
   Widget build(BuildContext context) {
     final c = DayColors.of(context);
     final text = Theme.of(context).textTheme.bodyMedium!;
-    final big = text.copyWith(
-      fontSize: phone ? 36 : 48,
-      height: phone ? 44 / 36 : 56 / 48,
-      color: c.text,
-    );
-    return Container(
-      width: double.infinity,
-      padding: phone
-          ? const EdgeInsets.symmetric(horizontal: 24, vertical: 20)
-          : const EdgeInsets.all(28),
-      decoration: BoxDecoration(
-        color: c.screen,
-        borderRadius: phone
-            ? BorderRadius.circular(24)
-            : const BorderRadius.vertical(bottom: Radius.circular(28)),
+    final all = done == total;
+    // The border colour for the rest of the week: faint next to the bright
+    // done part in both themes, so the share reads at a glance.
+    final bar = ClipRRect(
+      borderRadius: BorderRadius.circular(3),
+      child: Container(
+        height: 6,
+        color: c.border,
+        alignment: Alignment.centerLeft,
+        child: AnimatedFractionallySizedBox(
+          duration: MotionTokens.duration(
+            context,
+            const Duration(milliseconds: 380),
+          ),
+          curve: Curves.easeOutCubic,
+          widthFactor: done / total,
+          child: Container(color: c.text),
+        ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          BlurSwap(
-            swapKey: label,
-            alignment: AlignmentDirectional.centerStart,
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: text.copyWith(
-                fontSize: 13,
-                height: 18 / 13,
-                color: c.muted,
+    );
+    final label = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          all ? 'Всё сделано за неделю' : 'Сделано на этой неделе',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: text.copyWith(fontSize: 15, height: 20 / 15, color: c.muted),
+        ),
+        const SizedBox(height: 10),
+        bar,
+      ],
+    );
+    return Semantics(
+      container: true,
+      label:
+          '${all ? 'Всё сделано за неделю' : 'Сделано на этой неделе'}: '
+          '$done из $total',
+      excludeSemantics: true,
+      child: Container(
+        // Like the week: 7 days of 40 with 10 gaps and 10 a side; the
+        // height grows with large text instead of clipping.
+        width: phone ? null : 360,
+        constraints: BoxConstraints(minHeight: phone ? 73 : 77),
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        alignment: Alignment.center,
+        child: Row(
+          children: [
+            Expanded(child: label),
+            const SizedBox(width: 20),
+            Text.rich(
+              TextSpan(
+                children: [
+                  TextSpan(
+                    text: '$done',
+                    style: text.copyWith(
+                      fontSize: 32,
+                      height: 38 / 32,
+                      color: c.text,
+                    ),
+                  ),
+                  TextSpan(
+                    text: ' из $total',
+                    style: text.copyWith(fontSize: 20, color: c.muted),
+                  ),
+                ],
               ),
             ),
-          ),
-          BlurSwap(
-            swapKey: count,
-            alignment: AlignmentDirectional.centerStart,
-            delay: const Duration(milliseconds: 100),
-            child: Text(
-              '$count ${_plural(count, 'задача', 'задачи', 'задач')}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: big,
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

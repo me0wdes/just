@@ -118,6 +118,13 @@ class _FluidSwitchTileState extends State<FluidSwitchTile>
 
   @override
   Widget build(BuildContext context) {
+    // Phone: the iOS-sized 51×31 track with a 27 px thumb, easy under a
+    // thumb; a computer keeps the compact 34×20.
+    final phone = MediaQuery.sizeOf(context).width < 600;
+    final trackW = phone ? 51.0 : 34.0,
+        trackH = phone ? 31.0 : 20.0,
+        thumb = phone ? 27.0 : 16.0,
+        travel = trackW - thumb - 4;
     final colors = Theme.of(context).colorScheme;
     final rtl = Directionality.of(context) == TextDirection.rtl;
     return Semantics(
@@ -183,7 +190,7 @@ class _FluidSwitchTileState extends State<FluidSwitchTile>
                   ? (details) {
                       dragPosition =
                           (dragPosition +
-                                  details.delta.dx * (rtl ? -1 : 1) / 14)
+                                  details.delta.dx * (rtl ? -1 : 1) / travel)
                               .clamp(0, 1);
                       position.value = dragPosition;
                     }
@@ -241,8 +248,8 @@ class _FluidSwitchTileState extends State<FluidSwitchTile>
                             Container(
                               key: const Key('fluid-switch-track'),
                               // FF geometry: 34×20 track, 16px thumb, 2px inset.
-                              width: 34,
-                              height: 20,
+                              width: trackW,
+                              height: trackH,
                               decoration: BoxDecoration(
                                 color: Color.lerp(
                                   colors.onSurfaceVariant.withValues(
@@ -251,7 +258,7 @@ class _FluidSwitchTileState extends State<FluidSwitchTile>
                                   colors.primary,
                                   x,
                                 ),
-                                borderRadius: BorderRadius.circular(20),
+                                borderRadius: BorderRadius.circular(trackH),
                                 border: focused
                                     ? Border.all(
                                         color: colors.onSurface,
@@ -264,17 +271,17 @@ class _FluidSwitchTileState extends State<FluidSwitchTile>
                                 child: Transform.translate(
                                   offset: Offset(
                                     2 +
-                                        (rtl ? 1 - x : x) * (14 - extra) +
+                                        (rtl ? 1 - x : x) * (travel - extra) +
                                         extra / 2,
                                     0,
                                   ),
                                   child: Transform.scale(
-                                    scaleX: 1 + extra / 16,
-                                    scaleY: 1 - 4 * s / 16,
+                                    scaleX: 1 + extra / thumb,
+                                    scaleY: 1 - 4 * s / thumb,
                                     child: Container(
                                       key: const Key('fluid-switch-thumb'),
-                                      width: 16,
-                                      height: 16,
+                                      width: thumb,
+                                      height: thumb,
                                       decoration: BoxDecoration(
                                         // Paper on an ink track when on, so
                                         // the thumb stays visible in dark.
@@ -283,7 +290,9 @@ class _FluidSwitchTileState extends State<FluidSwitchTile>
                                           colors.surface,
                                           x,
                                         ),
-                                        borderRadius: BorderRadius.circular(14),
+                                        borderRadius: BorderRadius.circular(
+                                          thumb,
+                                        ),
                                         boxShadow: const [
                                           BoxShadow(
                                             color: Color(0x16000000),

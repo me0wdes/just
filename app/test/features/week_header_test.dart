@@ -166,18 +166,52 @@ void main() {
       feedback: const SilentCompletionFeedback(),
       today: () => LocalDate.parse('2026-10-19'),
     );
-    c.navigate(TaskView.all);
     await tester.pumpWidget(MaterialApp(home: TaskHome(controller: c)));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('20').first);
+    // From «Сегодня» the week's pill flows into the progress: the same
+    // pill, not a new one.
+    final pill = tester.renderObject(find.byKey(const Key('header-pill')));
+    final weekSize = tester.getSize(find.byKey(const Key('header-pill')));
+    c.navigate(TaskView.all);
     await tester.pumpAndSettle();
+    expect(
+      tester.renderObject(find.byKey(const Key('header-pill'))),
+      same(pill),
+    );
+    // …and the progress is the week's size, so the pill keeps its shape.
+    expect(tester.getSize(find.byKey(const Key('header-pill'))), weekSize);
+    // The week's progress under the island, the month dropped from it.
+    expect(find.text('0 из 2', findRichText: true), findsOneWidget);
+    Future<void> openMonth() async {
+      await tester.tap(find.textContaining('2 задачи', findRichText: true));
+      await tester.pumpAndSettle();
+      expect(find.text('Октябрь 2026'), findsOneWidget);
+    }
+
+    await openMonth();
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.text('Октябрь 2026'), findsNothing);
+    await openMonth();
+    await tester.tap(find.text('20'));
+    await tester.pumpAndSettle();
+    expect(find.text('Октябрь 2026'), findsNothing);
     expect(c.query.view, TaskView.all);
     expect(find.text('Завтра дело'), findsOneWidget);
     expect(find.text('Сегодня дело'), findsNothing);
-    await tester.tap(find.text('20').first);
+    await tester.tap(find.textContaining('1 задача', findRichText: true));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('20'));
     await tester.pumpAndSettle();
     expect(c.query.day, isNull);
     expect(find.text('Сегодня дело'), findsOneWidget);
+    // A done task of the week counts as done, not gone.
+    final done = c.tasks.firstWhere((t) => t.title == 'Сегодня дело');
+    await tester.runAsync(
+      () => repo.execute(TaskCommand.completeTask(done.id, '2026-10-19')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('1 из 2', findRichText: true), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
     c.dispose();
     await db.close();

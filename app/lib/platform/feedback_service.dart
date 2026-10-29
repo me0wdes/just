@@ -75,6 +75,21 @@ class AssetCompletionAudio implements CompletionAudio {
   /// Copies every tone into the audio cache up front, so the first tap
   /// does not wait for it.
   void preload() {
+    // Android: interface tones sound like a game's, on the media volume,
+    // in vibrate mode too, and without pausing the music someone listens to.
+    if (Platform.isAndroid) {
+      AudioPlayer.global
+          .setAudioContext(
+            AudioContext(
+              android: const AudioContextAndroid(
+                contentType: AndroidContentType.sonification,
+                usageType: AndroidUsageType.game,
+                audioFocus: AndroidAudioFocus.none,
+              ),
+            ),
+          )
+          .ignore();
+    }
     AudioCache.instance.loadAll([
       for (final s in UiSound.values) s.asset,
     ]).ignore();

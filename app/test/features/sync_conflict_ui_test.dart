@@ -78,11 +78,14 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Неотправленные изменения'), findsOneWidget);
     expect(find.text('Не удалось принять цвет списка.'), findsOneWidget);
-    expect(find.text('Взять версию сервера'), findsOneWidget);
-    await tester.tap(find.text('Взять версию сервера'));
+    expect(find.text('Версия сервера'), findsOneWidget);
+    await tester.tap(find.text('Версия сервера'));
     await tester.pumpAndSettle();
     expect(await repo.allPending(), isEmpty);
     expect(backups.copies, 1);
+    // The last conflict settled: the dialog closes by itself.
+    await tester.pumpAndSettle();
+    expect(find.text('Неотправленные изменения'), findsNothing);
     await tester.pumpWidget(const SizedBox());
     controller.dispose();
     engine.dispose();

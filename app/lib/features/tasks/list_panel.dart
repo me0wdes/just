@@ -45,7 +45,10 @@ class ListPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = DayColors.of(context);
     final theme = Theme.of(context);
-    final extent = MediaQuery.textScalerOf(context).scale(15) + 25;
+    // Phone rows are 48 tall for a finger; a computer keeps 40.
+    final extent =
+        MediaQuery.textScalerOf(context).scale(15) +
+        (MediaQuery.sizeOf(context).width < 600 ? 33 : 25);
     const gap = 4.0;
     final q = controller.query;
     final rows = <Widget>[];

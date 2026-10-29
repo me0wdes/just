@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 
 import '../../domain/models.dart';
 import '../../platform/feedback_service.dart';
+import '../../platform/reminder_service.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/sync_status_icon.dart';
 import '../../theme/chroma_swap.dart';
@@ -268,38 +269,45 @@ class _TaskHomeState extends State<TaskHome> {
       padding: const EdgeInsets.only(bottom: _fade),
       itemCount: items.length,
       // The dragged card lifts with a soft shadow cut to its own shape;
-      // the item's 8px bottom gap stays outside the shadow.
+      // the item's 8px bottom gap stays outside the shadow. Touch picks up
+      // where the press left it (sunk to .97) and grows to the touch menu's
+      // 1.03, around the card's own centre, so nothing jumps.
       proxyDecorator: (child, index, animation) => AnimatedBuilder(
         animation: animation,
         child: child,
         builder: (context, child) {
           final t = Curves.easeOut.transform(animation.value);
+          final from = desktopLayout ? 1.0 : .97,
+              to = desktopLayout ? 1.015 : liftScale;
           return Material(
             type: MaterialType.transparency,
-            child: Transform.scale(
-              scale: 1 + .015 * t,
-              child: Stack(
-                children: [
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    top: 0,
-                    bottom: 8,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(14),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: .18 * t),
-                            blurRadius: 24,
-                            offset: Offset(0, 8 * t),
-                          ),
-                        ],
+            child: LayoutBuilder(
+              builder: (context, box) => Transform.scale(
+                scale: from + (to - from) * t,
+                alignment: Alignment(0, -8 / box.maxHeight),
+                child: Stack(
+                  children: [
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      top: 0,
+                      bottom: 8,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(14),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: .18 * t),
+                              blurRadius: 24,
+                              offset: Offset(0, 8 * t),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                  child!,
-                ],
+                    child!,
+                  ],
+                ),
               ),
             ),
           );
@@ -417,60 +425,70 @@ class _TaskHomeState extends State<TaskHome> {
     );
   }
 
-  Widget reminderWarning() => OutlinedButton.icon(
-    icon: DayIcon(
-      DayGlyph.warning,
-      size: 16,
-      color: Theme.of(context).colorScheme.error,
-    ),
-    label: Text(
-      'Напоминания: ${c.reminderFailures.length}',
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-    ),
-    onPressed: () {
-      DaySound.play(context, UiSound.open);
-      showDialog<void>(
-        context: context,
-        builder: (context) => DayDialog(
-          width: 460,
-          title: const Text('Напоминания требуют внимания'),
-          content: SizedBox(
-            width: 420,
-            child: ListView(
-              shrinkWrap: true,
-              children: [
-                for (final entry in c.reminderFailures.entries)
-                  ListTile(
-                    title: Text(
-                      c.tasks
-                              .where((t) => t.id == entry.key)
-                              .firstOrNull
-                              ?.title ??
-                          'Системное напоминание',
-                    ),
-                    subtitle: Text(entry.value),
-                    onTap: entry.key == '*'
-                        ? null
-                        : () {
-                            Navigator.pop(context);
-                            c.requestOpen(entry.key);
-                          },
-                  ),
+  /// Figma «Напоминания не придут»: a quiet button by the filters when the
+  /// system will not deliver reminders, and a dialog that says why in one
+  /// sentence and opens the right settings page.
+  Widget reminderWarning() {
+    final colors = DayColors.of(context);
+    final reasons = c.reminderFailures.values;
+    final unsupported = reasons.every((r) => r.contains('недоступны'));
+    return DayButton(
+      key: const Key('reminder-warning'),
+      kind: DayButtonKind.secondary,
+      expand: !desktopLayout,
+      icon: DayIcon(DayGlyph.warning, size: 16, color: colors.overdue),
+      label: Text(
+        unsupported ? 'Напоминания недоступны' : 'Напоминания выключены',
+      ),
+      onPressed: showReminderProblem,
+    );
+  }
+
+  Future<void> showReminderProblem() async {
+    DaySound.play(context, UiSound.open);
+    final failures = c.reminderFailures;
+    final reasons = failures.values;
+    final exact = reasons.any((r) => r.contains('точные'));
+    final off = reasons.any((r) => r.contains('выключены'));
+    final unsupported = reasons.every((r) => r.contains('недоступны'));
+    final why = exact
+        ? 'Android не разрешает Just ставить точные будильники, поэтому напоминания не сработают вовремя. Разрешите их в настройках: кнопка ниже откроет нужный экран.'
+        : off
+        ? 'Уведомления для Just выключены в настройках системы, поэтому напоминания не придут. Включите их, и Just сам поставит напоминания заново.'
+        : unsupported
+        ? 'На этом устройстве Just не может показывать напоминания.'
+        : reasons.first;
+    final open = await showDialog<bool>(
+      context: context,
+      builder: (context) => DayDialog(
+        width: 460,
+        title: const Text('Напоминания не придут'),
+        // Figma «Напоминания не придут»: the reason alone, no task list.
+        content: Text(why),
+        actions: unsupported
+            ? [
+                DayButton(
+                  onPressed: () => Navigator.pop(context),
+                  label: const Text('Понятно'),
+                ),
+              ]
+            : [
+                DayButton(
+                  kind: DayButtonKind.ghost,
+                  onPressed: () => Navigator.pop(context),
+                  label: const Text('Не сейчас'),
+                ),
+                DayButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  label: const Text('Открыть настройки'),
+                ),
               ],
-            ),
-          ),
-          actions: [
-            DayButton(
-              kind: DayButtonKind.primary,
-              onPressed: () => Navigator.pop(context),
-              label: const Text('Понятно'),
-            ),
-          ],
-        ),
-      );
-    },
-  );
+      ),
+    );
+    if (open == true) {
+      await NativeNotificationPort.openSettings(exactAlarms: exact);
+    }
+  }
 
   /// Figma «Frame 1/2»: filters, cards, add field under the header.
   Widget workspace(bool desktop, bool inline) {
@@ -491,6 +509,12 @@ class _TaskHomeState extends State<TaskHome> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // A phone has no room beside the filters: the warning takes its
+          // own full-width line above them.
+          if (!desktop && c.reminderFailures.isNotEmpty) ...[
+            reminderWarning(),
+            const SizedBox(height: 12),
+          ],
           Row(
             children: [
               desktop
@@ -512,9 +536,9 @@ class _TaskHomeState extends State<TaskHome> {
                       ),
                     )
                   : Expanded(child: filters()),
-              if (c.reminderFailures.isNotEmpty) ...[
+              if (desktop && c.reminderFailures.isNotEmpty) ...[
                 const SizedBox(width: 12),
-                Flexible(child: reminderWarning()),
+                reminderWarning(),
               ],
             ],
           ),
@@ -580,6 +604,9 @@ class _TaskHomeState extends State<TaskHome> {
     if (box == null || !box.hasSize) return null;
     return box.localToGlobal(Offset.zero) & box.size;
   }
+
+  /// How far a held card lifts on a phone; the touch menu keeps it there.
+  static const liftScale = 1.03;
 
   /// How tall the fade over the last cards is.
   static const _fade = 32.0;
