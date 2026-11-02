@@ -512,41 +512,87 @@ class _IslandState extends State<_Island> {
     final tap = widget.onTap;
     final words = widget.parts.map((p) => p.$1).join();
     final reduce = MediaQuery.disableAnimationsOf(context);
-    final content = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Flexible(
-          child: BlurSwap(
-            swapKey: widget.swapKey,
-            sizeFromCurrent: true,
-            child: Text.rich(
-              TextSpan(
-                children: [
-                  for (final (text, muted) in widget.parts)
-                    TextSpan(
-                      text: text,
-                      style: style.copyWith(color: muted ? c.muted : c.text),
-                    ),
-                ],
-              ),
-              key: ValueKey(widget.swapKey),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ),
-        if (tap != null) ...[
-          const SizedBox(width: 8),
-          AnimatedRotation(
-            turns: widget.open ? .5 : 0,
-            duration: reduce
-                ? Duration.zero
-                : const Duration(milliseconds: 200),
-            curve: Curves.easeOutCubic,
-            child: DayIcon(DayGlyph.down, size: 16, color: c.muted),
-          ),
+    final motion = reduce ? Duration.zero : const Duration(milliseconds: 680);
+    const curve = Cubic(.22, 1, .36, 1);
+    // The island is as wide as its real words (measured, not whatever the
+    // old and new texts add up to) and eases there from wherever it is, so
+    // a second change mid-way bends the motion instead of snapping it.
+    final painter = TextPainter(
+      text: TextSpan(
+        children: [
+          for (final (text, _) in widget.parts)
+            TextSpan(text: text, style: style),
         ],
-      ],
+      ),
+      textDirection: TextDirection.ltr,
+      textScaler: MediaQuery.textScalerOf(context),
+      maxLines: 1,
+    )..layout();
+    final maxInner = (widget.phone ? 240.0 : 520.0) - (widget.phone ? 40 : 48);
+    final arrowW = tap == null ? 0.0 : 24.0;
+    final textW = math.min(painter.width.ceilToDouble(), maxInner - arrowW);
+    final boxH = painter.height;
+    painter.dispose();
+    final content = ClipRect(
+      child: OverflowBox(
+        minWidth: 0,
+        maxWidth: double.infinity,
+        minHeight: boxH,
+        maxHeight: boxH,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: maxInner - arrowW),
+              child: BlurSwap(
+                swapKey: widget.swapKey,
+                sizeFromCurrent: true,
+                child: Text.rich(
+                  TextSpan(
+                    children: [
+                      for (final (text, muted) in widget.parts)
+                        TextSpan(
+                          text: text,
+                          style: style.copyWith(
+                            color: muted ? c.muted : c.text,
+                          ),
+                        ),
+                    ],
+                  ),
+                  key: ValueKey(widget.swapKey),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+            // The chevron grows in and out with the island instead of
+            // popping.
+            TweenAnimationBuilder<double>(
+              tween: Tween(end: tap == null ? 0.0 : 1.0),
+              duration: motion,
+              curve: curve,
+              builder: (context, t, child) => ClipRect(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  widthFactor: t,
+                  child: Opacity(opacity: t, child: child),
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.only(left: 8),
+                child: AnimatedRotation(
+                  turns: widget.open ? .5 : 0,
+                  duration: reduce
+                      ? Duration.zero
+                      : const Duration(milliseconds: 200),
+                  curve: Curves.easeOutCubic,
+                  child: DayIcon(DayGlyph.down, size: 16, color: c.muted),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
     return FocusableActionDetector(
       enabled: tap != null,
@@ -588,16 +634,13 @@ class _IslandState extends State<_Island> {
                     ? Border.all(color: c.muted, width: 1.5)
                     : null,
               ),
-              // The width follows the new words while they swap through a
-              // blur. AnimatedSize with a zero duration re-dirties its own
-              // layout, so reduced motion skips it.
-              child: reduce
-                  ? content
-                  : AnimatedSize(
-                      duration: const Duration(milliseconds: 680),
-                      curve: const Cubic(.22, 1, .36, 1),
-                      child: content,
-                    ),
+              child: AnimatedContainer(
+                duration: motion,
+                curve: curve,
+                width: textW + arrowW,
+                height: boxH,
+                child: content,
+              ),
             ),
           ),
         ),
