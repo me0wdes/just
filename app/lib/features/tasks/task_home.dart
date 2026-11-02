@@ -156,6 +156,26 @@ class _TaskHomeState extends State<TaskHome> {
     }
   }
 
+  /// The second step of «Сменить список»: the other lists, in the same
+  /// menu skin (touch keeps the held card lit).
+  void moveMenu(TaskItem task, Offset at, Rect? anchor, Widget row) {
+    final current = task.listIds.firstOrNull ?? inboxId;
+    showDayMenu(context, at, anchor: anchor, preview: row, [
+      for (final list in c.lists)
+        if (list.id != current)
+          DayMenuItem(TaskController.listTitle(list), DayGlyph.list, () async {
+            await c.patchTask(task.id, {
+              'listIds': list.id == inboxId ? <String>[] : [list.id],
+            });
+            if (!mounted) return;
+            DayToast.show(
+              context,
+              'Перенесено: ${TaskController.listTitle(list)}',
+            );
+          }),
+    ]);
+  }
+
   Future<void> remove(TaskItem task) async {
     DaySound.play(context, UiSound.delete);
     if (c.selectedId == task.id) c.select(null);
@@ -371,6 +391,11 @@ class _TaskHomeState extends State<TaskHome> {
                 task.completed ? 'Вернуть' : 'Выполнить',
                 DayGlyph.check,
                 () => toggle(task),
+              ),
+              DayMenuItem(
+                'Сменить список',
+                DayGlyph.list,
+                () => moveMenu(task, at, desktop ? null : _rectOf(card), row),
               ),
               DayMenuItem(
                 'Удалить',

@@ -518,6 +518,7 @@ class _IslandState extends State<_Island> {
         Flexible(
           child: BlurSwap(
             swapKey: widget.swapKey,
+            sizeFromCurrent: true,
             child: Text.rich(
               TextSpan(
                 children: [

@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -487,8 +488,19 @@ class _DaySelectState<T> extends State<DaySelect<T>>
   Widget _popup(BuildContext context) {
     final c = DayColors.of(context);
     final box = triggerKey.currentContext?.findRenderObject() as RenderBox?;
-    final width = (box?.size.width ?? 160).clamp(180.0, 320.0);
     final phone = isPhone(context), row = phone ? 48.0 : controlHeight;
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final triggerWidth = box?.size.width ?? 160;
+    // A phone gets a roomy popup (at least 240, never wider than the
+    // screen); one that would run off the right edge hangs from the
+    // trigger's right edge instead.
+    final width = phone
+        ? math.max(triggerWidth, 240.0).clamp(0.0, screenWidth - 32).toDouble()
+        : triggerWidth.clamp(180.0, 320.0).toDouble();
+    final left = box != null && box.attached
+        ? box.localToGlobal(Offset.zero).dx
+        : 0.0;
+    final rightAlign = phone && left + width > screenWidth - 16;
     final moderate = MotionTokens.duration(context, MotionTokens.moderate);
     final fast = MotionTokens.duration(context, MotionTokens.fast);
     return Stack(
@@ -501,10 +513,15 @@ class _DaySelectState<T> extends State<DaySelect<T>>
         ),
         CompositedTransformFollower(
           link: link,
-          targetAnchor: Alignment.bottomLeft,
+          targetAnchor: rightAlign
+              ? Alignment.bottomRight
+              : Alignment.bottomLeft,
+          followerAnchor: rightAlign ? Alignment.topRight : Alignment.topLeft,
           offset: const Offset(0, 4),
           child: Align(
-            alignment: Alignment.topLeft,
+            alignment: rightAlign ? Alignment.topRight : Alignment.topLeft,
+            widthFactor: 1,
+            heightFactor: 1,
             child: AnimatedBuilder(
               animation: popup,
               builder: (context, child) {
@@ -527,7 +544,7 @@ class _DaySelectState<T> extends State<DaySelect<T>>
                   width: width,
                   padding: const EdgeInsets.all(4),
                   decoration: BoxDecoration(
-                    color: c.screen,
+                    color: c.pill,
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(color: c.border),
                     boxShadow: const [
@@ -755,7 +772,10 @@ class _TouchMenuRoute extends PopupRoute<void> {
   Widget buildPage(context, animation, secondaryAnimation) {
     final size = MediaQuery.sizeOf(context);
     final pad = MediaQuery.paddingOf(context);
-    final height = items.length * rowHeight + 10;
+    final height = math.min(
+      items.length * rowHeight + 10,
+      size.height - pad.top - pad.bottom - 16,
+    );
     // Under the card when it fits, else over it; on the finger's side.
     final below = anchor.bottom + gap + height <= size.height - pad.bottom - 8;
     final top = below
@@ -774,6 +794,21 @@ class _TouchMenuRoute extends PopupRoute<void> {
           );
     return Stack(
       children: [
+        // Like Telegram: what is behind the held card blurs as it dims.
+        Positioned.fill(
+          child: IgnorePointer(
+            child: AnimatedBuilder(
+              animation: animation,
+              builder: (context, _) {
+                final sigma = 10 * Curves.easeOut.transform(animation.value);
+                return BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
+                  child: const SizedBox.expand(),
+                );
+              },
+            ),
+          ),
+        ),
         if (preview != null)
           Positioned.fromRect(
             rect: anchor,
@@ -820,6 +855,7 @@ class _TouchMenuRoute extends PopupRoute<void> {
               child: _MenuPanel(
                 items: items,
                 rowHeight: rowHeight,
+                maxHeight: height,
                 close: () => Navigator.pop(context),
               ),
             ),
@@ -856,14 +892,17 @@ class _MenuRoute extends PopupRoute<void> {
     final phone = isPhone(context);
     final width = phone ? 250.0 : 200.0,
         rowHeight = phone ? _TouchMenuRoute.rowHeight : controlHeight;
-    final height = items.length * rowHeight + 10;
+    final height = math.min(items.length * rowHeight + 10, size.height - 16);
     // Keep the panel on screen; flip left/up near the edges.
     final left = position.dx + width > size.width - 8
         ? position.dx - width
         : position.dx;
-    final top = position.dy + height > size.height - 8
-        ? position.dy - height
-        : position.dy;
+    final top = math.max(
+      8.0,
+      position.dy + height > size.height - 8
+          ? position.dy - height
+          : position.dy,
+    );
     return Stack(
       children: [
         Positioned(
@@ -873,6 +912,7 @@ class _MenuRoute extends PopupRoute<void> {
           child: _MenuPanel(
             items: items,
             rowHeight: rowHeight,
+            maxHeight: height,
             close: () => Navigator.pop(context),
           ),
         ),
@@ -908,9 +948,13 @@ class _MenuPanel extends StatefulWidget {
   final List<DayMenuItem> items;
   final VoidCallback close;
   final double rowHeight;
+
+  /// Longer menus (many lists) scroll instead of running off the screen.
+  final double maxHeight;
   const _MenuPanel({
     required this.items,
     required this.close,
+    required this.maxHeight,
     this.rowHeight = controlHeight,
   });
   @override
@@ -929,7 +973,7 @@ class _MenuPanelState extends State<_MenuPanel> {
       child: Container(
         padding: const EdgeInsets.all(4),
         decoration: BoxDecoration(
-          color: c.screen,
+          color: c.pill,
           borderRadius: BorderRadius.circular(touch ? 16 : 12),
           border: Border.all(color: c.border),
           boxShadow: const [
@@ -940,10 +984,13 @@ class _MenuPanelState extends State<_MenuPanel> {
             ),
           ],
         ),
-        child: MouseRegion(
-          onExit: (_) => setState(() => highlight = null),
-          child: Stack(
-            children: [
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: widget.maxHeight - 10),
+          child: SingleChildScrollView(
+            child: MouseRegion(
+              onExit: (_) => setState(() => highlight = null),
+              child: Stack(
+                children: [
               AnimatedPositioned(
                 duration: fast,
                 curve: Curves.easeOut,
@@ -1020,6 +1067,8 @@ class _MenuPanelState extends State<_MenuPanel> {
                 ],
               ),
             ],
+          ),
+        ),
           ),
         ),
       ),
@@ -1170,7 +1219,7 @@ class _IconPickerRoute extends PopupRoute<String> {
             child: Container(
               padding: const EdgeInsets.fromLTRB(8, 12, 8, 8),
               decoration: BoxDecoration(
-                color: c.screen,
+                color: c.pill,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: c.border),
                 boxShadow: const [

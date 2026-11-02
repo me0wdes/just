@@ -12,12 +12,17 @@ class BlurSwap extends StatelessWidget {
 
   /// Where the old and new text line up while both are on screen.
   final AlignmentGeometry alignment;
+
+  /// Only the new text sets the size: the fading old one is laid over it
+  /// and never stretches the box (a shrinking island must not grow first).
+  final bool sizeFromCurrent;
   const BlurSwap({
     super.key,
     required this.child,
     required this.swapKey,
     this.delay = Duration.zero,
     this.alignment = Alignment.center,
+    this.sizeFromCurrent = false,
   });
   @override
   Widget build(BuildContext context) {
@@ -28,8 +33,24 @@ class BlurSwap extends StatelessWidget {
         duration: const Duration(milliseconds: 500),
         switchInCurve: Curves.easeOut,
         switchOutCurve: Curves.easeIn,
-        layoutBuilder: (current, previous) =>
-            Stack(alignment: alignment, children: [...previous, ?current]),
+        layoutBuilder: (current, previous) => sizeFromCurrent
+            ? Stack(
+                alignment: alignment,
+                clipBehavior: Clip.none,
+                children: [
+                  for (final old in previous)
+                    Positioned.fill(
+                      child: OverflowBox(
+                        alignment: alignment,
+                        minWidth: 0,
+                        maxWidth: double.infinity,
+                        child: old,
+                      ),
+                    ),
+                  ?current,
+                ],
+              )
+            : Stack(alignment: alignment, children: [...previous, ?current]),
         transitionBuilder: (child, animation) =>
             _Blur(animation: animation, child: child),
         child: KeyedSubtree(key: ValueKey(swapKey), child: child),

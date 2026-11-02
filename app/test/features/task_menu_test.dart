@@ -58,6 +58,42 @@ void main() {
     await db.close();
   });
 
+  testWidgets('card menu moves the task to another list', (tester) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final db = AppDatabase.memory(workspaceId: 'local');
+    final repo = SqliteTaskRepository(db);
+    const home = '6f0c2a54-4b9e-4f6b-9a51-0d3c7e1a2b01';
+    await repo.execute(TaskCommand.createList(home, 'Дом'));
+    await repo.execute(
+      TaskCommand.createTask(
+        id: 'x',
+        title: 'Лишнее дело',
+        listId: inboxId,
+        fields: {'plannedForDate': '2026-10-19'},
+      ),
+    );
+    final c = TaskController(
+      repo,
+      feedback: const SilentCompletionFeedback(),
+      today: () => LocalDate.parse('2026-10-19'),
+    );
+    await tester.pumpWidget(MaterialApp(home: TaskHome(controller: c)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Лишнее дело'), buttons: kSecondaryButton);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Сменить список'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Дом').last);
+    await tester.pumpAndSettle();
+    expect((await repo.readTask('x'))!.listIds, [home]);
+    await tester.pumpWidget(const SizedBox());
+    c.dispose();
+    await db.close();
+  });
+
   testWidgets('right click on a sidebar list offers rename and delete', (
     tester,
   ) async {

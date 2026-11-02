@@ -127,3 +127,12 @@ jobs:
             Обновления приходят сами: Just раз в несколько часов проверяет новые версии и предлагает обновиться. На Windows установщик ставит новую версию и перезапускает Just. Свой сервер обновляется сам каждую ночь.
 
             Контрольные суммы — в SHA256SUMS.txt.
+      # Only the two newest releases stay; older ones go once this one is
+      # out, so a failed build never removes anything. Tags are kept.
+      - name: Keep the two newest releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release list -R "$GITHUB_REPOSITORY" --limit 100 --json tagName,publishedAt \
+            -q 'sort_by(.publishedAt) | reverse | .[2:] | .[].tagName' |
+          while read -r tag; do gh release delete "$tag" -R "$GITHUB_REPOSITORY" --yes; done
