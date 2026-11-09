@@ -85,6 +85,15 @@ class TaskItem {
   String? get completionId => _data['completionId'] as String?;
   String? get successorId => _data['successorId'] as String?;
   bool get completed => _data['completedAt'] != null;
+
+  /// Done tasks are cleared out this long after they were completed.
+  static const completedKeep = Duration(days: 7);
+  DateTime? get completedAt => _data['completedAt'] == null
+      ? null
+      : DateTime.tryParse(_data['completedAt'] as String);
+
+  /// When a done task goes away; null while it is open.
+  DateTime? get expiresAt => completedAt?.add(completedKeep);
   bool get deleted => _data['deletedAt'] != null;
   double get position => (_data['position'] as num? ?? 0).toDouble();
   Map<String, Object?> toJson() => Map.of(_data);

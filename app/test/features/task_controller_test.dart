@@ -57,4 +57,36 @@ void main() {
       }
     },
   );
+
+  test('a done task is deleted a week after it was completed', () async {
+    final db = AppDatabase.memory(workspaceId: 'local');
+    final repo = SqliteTaskRepository(
+      db,
+      clock: () => DateTime.utc(2026, 10, 1, 12),
+    );
+    const id = '6f0c2a54-4b9e-4f6b-9a51-0d3c7e1a2b01';
+    await repo.execute(
+      TaskCommand.createTask(
+        id: id,
+        title: 'Старое дело',
+        listId: inboxId,
+        fields: {'dueDate': '2026-10-01'},
+      ),
+    );
+    await repo.execute(TaskCommand.completeTask(id, '2026-10-01'));
+    expect((await repo.readTask(id))!.expiresAt, DateTime.utc(2026, 10, 8, 12));
+    final controller = TaskController(
+      repo,
+      feedback: const SilentCompletionFeedback(),
+      today: () => LocalDate.parse('2026-10-09'),
+      clock: () => DateTime.utc(2026, 10, 9),
+    );
+    try {
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      expect((await repo.readTask(id))!.deleted, true);
+    } finally {
+      controller.dispose();
+      await db.close();
+    }
+  });
 }

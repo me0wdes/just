@@ -31,6 +31,11 @@ const _months = [
 String dueLabel(LocalDate due, LocalDate today, [String? time]) =>
     time == null ? _dayLabel(due, today) : '${_dayLabel(due, today)}, $time';
 
+/// «7 дн.» while more than a day is left, «5 ч» in the last day.
+String keepLabel(Duration left) => left.inHours < 24
+    ? '${math.max(1, (left.inMinutes / 60).ceil())} ч'
+    : '${(left.inMinutes / 1440).ceil()} дн.';
+
 String _dayLabel(LocalDate due, LocalDate today) {
   final days = due.utc.difference(today.utc).inDays;
   if (days == 0) return 'Сегодня';
@@ -112,6 +117,18 @@ class _TaskRowState extends State<TaskRow> {
         const SizedBox(width: 10),
         DayIcon(DayGlyph.bell, size: 14, color: c.muted),
       ],
+      // A done task shows how long it stays before it is cleared out.
+      if (task.completed && task.expiresAt != null)
+        if (task.expiresAt!.difference(now) case final left
+            when left > Duration.zero) ...[
+          if (task.dueDate != null) const SizedBox(width: 10),
+          DayIcon(DayGlyph.delete, size: 14, color: c.muted),
+          const SizedBox(width: 6),
+          Text(
+            'через ${keepLabel(left)}',
+            style: theme.textTheme.bodySmall!.copyWith(color: c.muted),
+          ),
+        ],
     ];
     return MouseRegion(
       onEnter: (_) => setState(() => hovered = true),
@@ -216,7 +233,11 @@ class _TaskRowState extends State<TaskRow> {
                                 if (meta.isNotEmpty)
                                   Padding(
                                     padding: const EdgeInsets.only(top: 2),
-                                    child: Row(children: meta),
+                                    child: Wrap(
+                                      crossAxisAlignment:
+                                          WrapCrossAlignment.center,
+                                      children: meta,
+                                    ),
                                   ),
                               ],
                             ),

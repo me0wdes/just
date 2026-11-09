@@ -115,8 +115,10 @@ class TaskController extends ChangeNotifier {
         )
         .listen((value) {
           calendar = value;
+          _purgeExpired();
           _notify();
         }, onError: _onError);
+    _purge = Timer.periodic(const Duration(minutes: 30), (_) => _purgeExpired());
     _lists = repository.watchLists().listen((value) {
       lists = value;
       _notify();
@@ -124,6 +126,24 @@ class TaskController extends ChangeNotifier {
   }
   void _notify() {
     if (!_disposed) notifyListeners();
+  }
+
+  Timer? _purge;
+  final _purged = <String>{};
+
+  /// Done tasks go a week after they were completed; it is an ordinary
+  /// delete, so every device ends up with the same list.
+  void _purgeExpired() {
+    final now = clock().toUtc();
+    for (final t in calendar) {
+      final at = t.expiresAt;
+      if (at == null || at.isAfter(now) || !_purged.add(t.id)) continue;
+      unawaited(
+        repository
+            .execute(TaskCommand.deleteTask(t.id))
+            .then((_) {}, onError: (Object _) => _purged.remove(t.id)),
+      );
+    }
   }
 
   void _onError(Object e) {
@@ -292,6 +312,7 @@ class TaskController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _purge?.cancel();
     _calendar?.cancel();
     _disposed = true;
     _tasks?.cancel();

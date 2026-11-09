@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
@@ -582,15 +583,33 @@ class _TaskHomeState extends State<TaskHome> {
               onHorizontalDragEnd: !desktop && c.query.view == TaskView.today
                   ? swipeDay
                   : null,
-              child: ShaderMask(
-                // Cards fade out above the field instead of being cut off.
-                blendMode: BlendMode.dstIn,
-                shaderCallback: (rect) => LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: const [Colors.black, Colors.transparent],
-                  stops: [1 - _fade / rect.height, 1],
-                ).createShader(rect),
+              // Cards fade out above the field and under the filters instead
+              // of being cut off; the top edge only once the list has been
+              // scrolled, so the first card at rest stays whole.
+              child: AnimatedBuilder(
+                animation: scroll,
+                builder: (context, child) => ShaderMask(
+                  blendMode: BlendMode.dstIn,
+                  shaderCallback: (rect) {
+                    final y = scroll.positions.isEmpty
+                        ? 0.0
+                        : scroll.positions.last.pixels;
+                    final top = (y / _fade).clamp(0.0, 1.0);
+                    final edge = math.min(_fade / rect.height, .5);
+                    return LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.black.withValues(alpha: 1 - top),
+                        Colors.black,
+                        Colors.black,
+                        Colors.transparent,
+                      ],
+                      stops: [0, edge, 1 - edge, 1],
+                    ).createShader(rect);
+                  },
+                  child: child,
+                ),
                 child: AnimatedSwitcher(
                   duration: MotionTokens.duration(context, MotionTokens.reflow),
                   switchInCurve: MotionTokens.easeOut,
