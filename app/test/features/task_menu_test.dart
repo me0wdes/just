@@ -126,7 +126,7 @@ void main() {
     );
     await tester.pumpWidget(MaterialApp(home: TaskHome(controller: c)));
     await tester.pumpAndSettle();
-    final y = (String t) => tester.getTopLeft(find.text(t)).dy;
+    double y(String t) => tester.getTopLeft(find.text(t)).dy;
     expect(find.text('Просроченные'), findsOneWidget);
     expect(y('Новое дело') < y('Просроченные'), true);
     expect(y('Просроченные') < y('Старое дело'), true);

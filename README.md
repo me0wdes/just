@@ -5,7 +5,7 @@
 ## Скачать
 
 <!-- releases -->
-**Текущая версия 0.2.29:** [Windows](https://github.com/me0wdes/just/releases/download/v0.2.29/Just-Setup-0.2.29.exe) · [macOS](https://github.com/me0wdes/just/releases/download/v0.2.29/Just-0.2.29.dmg) · [Android](https://github.com/me0wdes/just/releases/download/v0.2.29/Just-0.2.29-Android.apk)
+**Текущая версия 0.2.30:** [Windows](https://github.com/me0wdes/just/releases/download/v0.2.30/Just-Setup-0.2.30.exe) · [macOS](https://github.com/me0wdes/just/releases/download/v0.2.30/Just-0.2.30.dmg) · [Android](https://github.com/me0wdes/just/releases/download/v0.2.30/Just-0.2.30-Android.apk)
 
 Прошлые версии: [0.2.28](https://github.com/me0wdes/just/releases/tag/v0.2.28) · [0.2.27](https://github.com/me0wdes/just/releases/tag/v0.2.27) · [все релизы](https://github.com/me0wdes/just/releases)
 <!-- /releases -->
