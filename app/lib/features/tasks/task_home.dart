@@ -278,6 +278,21 @@ class _TaskHomeState extends State<TaskHome> {
     if (c.error != null) return Center(child: Text(c.error!));
     if (c.loading) return const Center(child: CircularProgressIndicator());
     final items = showCompleted ? completed : active;
+    // Figma «Сегодня»: what is left over from earlier days sits apart under
+    // «Просроченные», so it is not taken for the day's new tasks.
+    final today = c.today();
+    bool leftOver(TaskItem t) =>
+        t.dueDate != null && t.dueDate!.compareTo(today) < 0;
+    final grouped =
+        !showCompleted && c.query.view == TaskView.today && c.day == today;
+    final entries = <Object>[
+      if (grouped) ...[
+        ...items.where((t) => !leftOver(t)),
+        if (items.any(leftOver)) _overdueLabel,
+        ...items.where(leftOver),
+      ] else
+        ...items,
+    ];
     if (!primed) {
       known.addAll(c.tasks.map((t) => t.id));
       primed = true;
@@ -288,7 +303,7 @@ class _TaskHomeState extends State<TaskHome> {
       buildDefaultDragHandles: false,
       // The last card can scroll clear of the fade.
       padding: const EdgeInsets.only(bottom: _fade),
-      itemCount: items.length,
+      itemCount: entries.length,
       // The dragged card lifts with a soft shadow cut to its own shape;
       // the item's 8px bottom gap stays outside the shadow. Touch picks up
       // where the press left it (sunk to .97) and grows to the touch menu's
@@ -354,21 +369,38 @@ class _TaskHomeState extends State<TaskHome> {
       },
       onReorderItem: (oldIndex, newIndex) {
         if (!desktopLayout && pressMoved < 12) return;
-        if (showCompleted || oldIndex >= active.length) return;
+        if (showCompleted || entries[oldIndex] is! TaskItem) return;
         DaySound.play(context, UiSound.nav);
-        final copy = List<TaskItem>.of(active), item = active[oldIndex];
-        copy.removeAt(oldIndex);
+        final copy = List<Object>.of(entries);
+        final item = copy.removeAt(oldIndex) as TaskItem;
         final target = newIndex.clamp(0, copy.length);
-        final before = target == 0
-            ? (copy.firstOrNull?.position ?? 1024) - 2048
-            : copy[target - 1].position;
-        final after = target == copy.length
-            ? before + 2048
-            : copy[target].position;
+        // The neighbours that are tasks, the label does not count.
+        final prev = copy.sublist(0, target).whereType<TaskItem>().lastOrNull;
+        final next = copy.sublist(target).whereType<TaskItem>().firstOrNull;
+        final before = prev?.position ?? (next?.position ?? 1024) - 2048;
+        final after = next?.position ?? before + 2048;
         c.reorderTask(item.id, (before + after) / 2);
       },
       itemBuilder: (context, index) {
-        final task = items[index];
+        final entry = entries[index];
+        if (entry is! TaskItem) {
+          return KeyedSubtree(
+            key: const ValueKey('overdue-label'),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+              child: Text(
+                'Просроченные',
+                style: Theme.of(context).textTheme.bodyMedium!.copyWith(
+                  fontSize: 15,
+                  height: 20 / 15,
+                  fontWeight: FontWeight.w500,
+                  color: DayColors.of(context).muted,
+                ),
+              ),
+            ),
+          );
+        }
+        final task = entry;
         final fresh = known.add(task.id);
         // The card on screen, so a touch menu can lift it over the dimming.
         BuildContext? card;
@@ -655,6 +687,9 @@ class _TaskHomeState extends State<TaskHome> {
     if (box == null || !box.hasSize) return null;
     return box.localToGlobal(Offset.zero) & box.size;
   }
+
+  /// Stands for the «Просроченные» label among the cards.
+  static final _overdueLabel = Object();
 
   /// How far a held card lifts on a phone; the touch menu keeps it there.
   static const liftScale = 1.03;

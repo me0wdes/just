@@ -94,6 +94,47 @@ void main() {
     await db.close();
   });
 
+  testWidgets('overdue tasks sit apart under «Просроченные» in Сегодня', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final db = AppDatabase.memory(workspaceId: 'local');
+    final repo = SqliteTaskRepository(db);
+    await repo.execute(
+      TaskCommand.createTask(
+        id: 'old',
+        title: 'Старое дело',
+        listId: inboxId,
+        fields: {'dueDate': '2026-10-17'},
+      ),
+    );
+    await repo.execute(
+      TaskCommand.createTask(
+        id: 'new',
+        title: 'Новое дело',
+        listId: inboxId,
+        fields: {'dueDate': '2026-10-19'},
+      ),
+    );
+    final c = TaskController(
+      repo,
+      feedback: const SilentCompletionFeedback(),
+      today: () => LocalDate.parse('2026-10-19'),
+    );
+    await tester.pumpWidget(MaterialApp(home: TaskHome(controller: c)));
+    await tester.pumpAndSettle();
+    final y = (String t) => tester.getTopLeft(find.text(t)).dy;
+    expect(find.text('Просроченные'), findsOneWidget);
+    expect(y('Новое дело') < y('Просроченные'), true);
+    expect(y('Просроченные') < y('Старое дело'), true);
+    await tester.pumpWidget(const SizedBox());
+    c.dispose();
+    await db.close();
+  });
+
   testWidgets('right click on a sidebar list offers rename and delete', (
     tester,
   ) async {
