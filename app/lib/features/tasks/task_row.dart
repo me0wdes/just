@@ -11,6 +11,7 @@ import '../../theme/app_theme.dart';
 import '../../theme/day_icon.dart';
 import '../../theme/fluid_surface.dart';
 import '../../theme/motion_tokens.dart';
+import 'beam_border.dart';
 
 const _months = [
   'янв',
@@ -60,6 +61,9 @@ class TaskRow extends StatefulWidget {
   final bool longPressMenu;
   final bool selected;
   final LocalDate? today;
+
+  /// Marks a new task among overdue ones; null for every other card.
+  final BeamStyle? beam;
   const TaskRow({
     super.key,
     required this.task,
@@ -69,6 +73,7 @@ class TaskRow extends StatefulWidget {
     this.longPressMenu = false,
     this.selected = false,
     this.today,
+    this.beam,
   });
   @override
   State<TaskRow> createState() => _TaskRowState();
@@ -83,6 +88,24 @@ class _TaskRowState extends State<TaskRow> {
     _due?.cancel();
     super.dispose();
   }
+
+  Widget _beamed(Widget child) => widget.beam == null
+      ? child
+      : BeamBorder(style: widget.beam!, child: child);
+
+  Widget _lit(Widget child) => widget.beam == null
+      ? child
+      : Stack(
+          fit: StackFit.passthrough,
+          children: [
+            Positioned.fill(
+              child: IgnorePointer(
+                child: BeamGlow(palette: widget.beam!.palette),
+              ),
+            ),
+            child,
+          ],
+        );
 
   @override
   Widget build(BuildContext context) {
@@ -145,7 +168,7 @@ class _TaskRowState extends State<TaskRow> {
             pressed ? const Duration(milliseconds: 120) : MotionTokens.panel,
           ),
           curve: MotionTokens.easeOut,
-          child: AnimatedContainer(
+          child: _beamed(AnimatedContainer(
             duration: MotionTokens.duration(context, MotionTokens.fast),
             clipBehavior: Clip.antiAlias,
             decoration: BoxDecoration(
@@ -178,7 +201,7 @@ class _TaskRowState extends State<TaskRow> {
                       },
                 hoverColor: Colors.transparent,
                 focusColor: c.track,
-                child: ConstrainedBox(
+                child: _lit(ConstrainedBox(
                   constraints: const BoxConstraints(minHeight: 68),
                   child: Padding(
                     padding: const EdgeInsets.only(left: 4, right: 4),
@@ -247,10 +270,10 @@ class _TaskRowState extends State<TaskRow> {
                       ],
                     ),
                   ),
-                ),
+                )),
               ),
             ),
-          ),
+          )),
         ),
       ),
     );

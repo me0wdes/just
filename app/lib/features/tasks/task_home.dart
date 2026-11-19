@@ -18,6 +18,8 @@ import '../../theme/day_sound.dart';
 import '../../theme/fluid_surface.dart';
 import '../../theme/motion_tokens.dart';
 import '../../theme/segments.dart';
+import 'beam_border.dart';
+import 'greeting_header.dart' show FlowPalette;
 import 'list_panel.dart';
 import 'task_composer.dart';
 import 'task_controller.dart';
@@ -62,6 +64,9 @@ class _TaskHomeState extends State<TaskHome> {
   final scroll = ScrollController();
   bool showCompleted = false;
   final settling = <String>{}, collapsing = <String>{};
+
+  /// New tasks already opened: their mark has done its job.
+  final seen = <String>{};
 
   /// Rows present at first paint stay still; rows added later rise in.
   final known = <String>{};
@@ -191,6 +196,7 @@ class _TaskHomeState extends State<TaskHome> {
   }
 
   Future<void> open(TaskItem task, bool inline) async {
+    seen.add(task.id);
     if (c.selectedId != task.id) {
       DaySound.play(context, c.selectedId == null ? UiSound.open : UiSound.nav);
     }
@@ -293,6 +299,15 @@ class _TaskHomeState extends State<TaskHome> {
       ] else
         ...items,
     ];
+    // Overdue cards sit below; the day's own cards, until opened, carry the
+    // header's palette as a thin comet so they are not taken for old ones.
+    final lit = grouped && items.any(leftOver)
+        ? [
+            for (final t in items)
+              if (!leftOver(t) && !t.completed && !seen.contains(t.id)) t.id,
+          ]
+        : const <String>[];
+    final palette = FlowPalette.forHour(c.clock().hour);
     if (!primed) {
       known.addAll(c.tasks.map((t) => t.id));
       primed = true;
@@ -409,6 +424,9 @@ class _TaskHomeState extends State<TaskHome> {
           task: task,
           selected: c.selectedId == task.id,
           today: c.query.today,
+          beam: lit.contains(task.id)
+              ? BeamStyle(palette, lit.indexOf(task.id))
+              : null,
           onToggle: () => toggle(task),
           onOpen: () => open(task, inline),
           // A finished card cannot be dragged, so its long press is free.

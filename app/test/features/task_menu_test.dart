@@ -5,6 +5,7 @@ import 'package:day_planner/data/app_database.dart';
 import 'package:day_planner/data/task_repository.dart';
 import 'package:day_planner/domain/commands.dart';
 import 'package:day_planner/domain/models.dart';
+import 'package:day_planner/features/tasks/beam_border.dart';
 import 'package:day_planner/features/tasks/task_controller.dart';
 import 'package:day_planner/features/tasks/task_home.dart';
 import 'package:day_planner/platform/feedback_service.dart';
@@ -130,6 +131,11 @@ void main() {
     expect(find.text('Просроченные'), findsOneWidget);
     expect(y('Новое дело') < y('Просроченные'), true);
     expect(y('Просроченные') < y('Старое дело'), true);
+    // Only the day's own card carries the comet, and opening it ends it.
+    expect(find.byType(BeamBorder), findsOneWidget);
+    await tester.tap(find.text('Новое дело'));
+    await tester.pumpAndSettle();
+    expect(find.byType(BeamBorder), findsNothing);
     await tester.pumpWidget(const SizedBox());
     c.dispose();
     await db.close();
