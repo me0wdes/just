@@ -312,12 +312,19 @@ class _TaskHomeState extends State<TaskHome> {
       known.addAll(c.tasks.map((t) => t.id));
       primed = true;
     }
-    if (items.isEmpty) return emptyState(showCompleted);
+    if (items.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 16),
+        child: emptyState(showCompleted),
+      );
+    }
     return ReorderableListView.builder(
       scrollController: scroll,
       buildDefaultDragHandles: false,
-      // The last card can scroll clear of the fade.
-      padding: const EdgeInsets.only(bottom: _fade),
+      // The last card can scroll clear of the fade. The 16px under the
+      // filters is padding too, so the top fade starts at the filters
+      // instead of leaving a gap above it.
+      padding: const EdgeInsets.only(top: 16, bottom: _fade),
       itemCount: entries.length,
       // The dragged card lifts with a soft shadow cut to its own shape;
       // the item's 8px bottom gap stays outside the shadow. Touch picks up
@@ -625,7 +632,6 @@ class _TaskHomeState extends State<TaskHome> {
               ],
             ],
           ),
-          const SizedBox(height: 16),
           Expanded(
             child: GestureDetector(
               // Phone «Сегодня»: a swipe turns the day, the way the week
@@ -685,7 +691,8 @@ class _TaskHomeState extends State<TaskHome> {
               ),
             ),
           ),
-          const SizedBox(height: 8),
+          // No gap: the fade already ends at the field, a second strip of
+          // empty space under it only looks like a hole.
           TaskComposer(
             focusNode: composer,
             onAdd: (text) async {
