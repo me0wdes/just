@@ -381,7 +381,6 @@ class _TaskDetailPanelState extends State<TaskDetailPanel> {
                 ),
               ),
               Divider(height: 1, thickness: 1, color: c.border),
-              const SizedBox(height: 8),
             ] else
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 14, 12, 10),

@@ -300,8 +300,6 @@ class TaskController extends ChangeNotifier {
   /// A new list takes the next colour of the palette, so neighbours differ.
   String get nextListColor =>
       listPalette[1 + lists.where((l) => l.id != inboxId).length % 7];
-  Future<CommandReceipt> setListIcon(String id, String icon) =>
-      repository.execute(TaskCommand.patchList(id, {'icon': icon}));
 
   /// Creates a list and returns its id, for the combobox «Создать».
   Future<String> createList(String name) async {

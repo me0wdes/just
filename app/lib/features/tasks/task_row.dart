@@ -161,7 +161,7 @@ class _TaskRowState extends State<TaskRow> {
         ),
       ],
       if (widget.list != null) ...[
-        const SizedBox(width: 8),
+        const SizedBox(width: 6),
         ListPill(widget.list!),
       ],
       if (task.recurrenceRuleId != null) ...[
@@ -240,7 +240,7 @@ class _TaskRowState extends State<TaskRow> {
                 hoverColor: Colors.transparent,
                 focusColor: c.track,
                 child: _lit(ConstrainedBox(
-                  constraints: const BoxConstraints(minHeight: 68),
+                  constraints: const BoxConstraints(minHeight: 66),
                   child: Padding(
                     padding: const EdgeInsets.only(left: 4, right: 4),
                     child: Row(
@@ -358,7 +358,8 @@ class ListPill extends StatelessWidget {
     final base = listColor(list);
     final dark = Theme.of(context).brightness == Brightness.dark;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
+      // Figma «Метка списка»: 8/2, radius 10, Medium 12 on a 14 line.
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
         color: base.withValues(alpha: dark ? .18 : .14),
         borderRadius: BorderRadius.circular(10),
@@ -368,6 +369,8 @@ class ListPill extends StatelessWidget {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: Theme.of(context).textTheme.bodySmall!.copyWith(
+          fontSize: 12,
+          height: 14 / 12,
           fontWeight: FontWeight.w500,
           color: Color.lerp(base, dark ? Colors.white : Colors.black, .3),
         ),

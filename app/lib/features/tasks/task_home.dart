@@ -530,7 +530,7 @@ class _TaskHomeState extends State<TaskHome> {
           return KeyedSubtree(
             key: ValueKey('group-${group?.id ?? 'overdue'}'),
             child: Padding(
-              padding: EdgeInsets.fromLTRB(14, index == 0 ? 0 : 8, 14, 8),
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
               child: _GroupLabel(
                 group ?? const _Group('over', 'Просроченные'),
               ),
@@ -1321,12 +1321,22 @@ class _GroupLabel extends StatelessWidget {
             text: group.title,
             style: base.copyWith(fontWeight: FontWeight.w500, color: head),
           ),
-          if (group.count != null)
+          // Figma: the heading, the count and the date are one row with an
+          // 8px gap, all Medium 15.
+          if (group.count != null) ...[
+            const WidgetSpan(child: SizedBox(width: 8)),
             TextSpan(
-              text: '  ${group.count}',
+              text: '${group.count}',
               style: base.copyWith(fontWeight: FontWeight.w500, color: head),
             ),
-          if (group.sub != null) TextSpan(text: '  ${group.sub}'),
+          ],
+          if (group.sub != null) ...[
+            const WidgetSpan(child: SizedBox(width: 8)),
+            TextSpan(
+              text: group.sub,
+              style: base.copyWith(fontWeight: FontWeight.w500),
+            ),
+          ],
         ],
       ),
       style: base,

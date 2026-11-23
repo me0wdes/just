@@ -193,10 +193,12 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Дом'), buttons: kSecondaryButton);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Сменить иконку'));
+    // The menu has no separate icon item: the icon is changed in «Изменить».
+    expect(find.text('Сменить иконку'), findsNothing);
+    await tester.tap(find.text('Изменить'));
     await tester.pumpAndSettle();
-    expect(find.text('Иконка списка'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('list-icon-home')));
+    await tester.tap(find.text('Сохранить'));
     await tester.pumpAndSettle();
     expect(c.lists.firstWhere((l) => l.id == home).icon, 'home');
     // A new list gets its icon in the same dialog as its name.

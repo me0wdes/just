@@ -25,7 +25,9 @@ class SwipeRow extends StatefulWidget {
 
 class _SwipeRowState extends State<SwipeRow>
     with SingleTickerProviderStateMixin {
-  static const revealed = 264.0;
+  /// Figma «Свайп влево»: the card moves 272, the actions hug their text
+  /// (14 each side) with a 1x24 divider in an 8px gap between them.
+  static const revealed = 272.0;
 
   /// How far the card has moved left, in pixels.
   late final shift = AnimationController(
@@ -82,18 +84,20 @@ class _SwipeRowState extends State<SwipeRow>
   }) {
     final c = DayColors.of(context);
     final tint = color ?? c.text;
-    return Expanded(
-      child: Semantics(
-        button: true,
-        label: label,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () {
-            _close();
-            tap();
-          },
+    return Semantics(
+      button: true,
+      label: label,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          _close();
+          tap();
+        },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
             children: [
               DayIcon(glyph, size: 22, color: tint),
               const SizedBox(height: 4),
@@ -101,6 +105,8 @@ class _SwipeRowState extends State<SwipeRow>
                 label,
                 maxLines: 1,
                 style: Theme.of(context).textTheme.bodySmall!.copyWith(
+                  fontSize: 12,
+                  height: 14 / 12,
                   color: tint,
                   fontWeight: FontWeight.w500,
                 ),
@@ -134,7 +140,9 @@ class _SwipeRowState extends State<SwipeRow>
                       // own width, so the actions keep a fixed size.
                       child: SizedBox(
                         width: revealed,
+                        height: double.infinity,
                         child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               _action(
                                 context,
@@ -199,9 +207,8 @@ class _SwipeRowState extends State<SwipeRow>
     );
   }
 
-  Widget _divider(DayColors c) => Container(
-    width: 1,
-    height: 24,
-    color: c.border,
+  Widget _divider(DayColors c) => SizedBox(
+    width: 8,
+    child: Center(child: Container(width: 1, height: 24, color: c.border)),
   );
 }

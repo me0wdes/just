@@ -268,7 +268,7 @@ class _KindChip extends StatelessWidget {
         onTap: onTap,
         child: AnimatedContainer(
           duration: MotionTokens.duration(context, MotionTokens.fast),
-          height: 32,
+          height: 31,
           padding: const EdgeInsets.symmetric(horizontal: 14),
           decoration: BoxDecoration(
             color: selected ? c.text : c.input,

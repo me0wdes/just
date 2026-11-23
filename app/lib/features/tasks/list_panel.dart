@@ -137,10 +137,6 @@ class ListPanel extends StatelessWidget {
             DayGlyph.note,
             () => edit(context, list: list),
           ),
-          DayMenuItem('Сменить иконку', listGlyph(list.icon), () async {
-            final key = await showDayIconPicker(context, at, list.icon);
-            if (key != null) await controller.setListIcon(list.id, key);
-          }),
           DayMenuItem('Удалить список', DayGlyph.delete, () {
             DaySound.play(context, UiSound.delete);
             controller.deleteList(list.id);
