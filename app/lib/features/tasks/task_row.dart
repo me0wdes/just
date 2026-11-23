@@ -37,6 +37,30 @@ String keepLabel(Duration left) => left.inHours < 24
     ? '${math.max(1, (left.inMinutes / 60).ceil())} ч'
     : '${(left.inMinutes / 1440).ceil()} дн.';
 
+const _weekdays = [
+  'Понедельник',
+  'Вторник',
+  'Среда',
+  'Четверг',
+  'Пятница',
+  'Суббота',
+  'Воскресенье',
+];
+const _weekdaysShort = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+
+/// The heading of a day in «Предстоящие»: «Сегодня · Пн, 23 ноя»,
+/// «Завтра · Вт, 24 ноя», then «Пятница · 27 ноя».
+({String title, String sub}) dayHeading(LocalDate day, LocalDate today) {
+  final d = day.utc, days = d.difference(today.utc).inDays;
+  final date =
+      '${d.day} ${_months[d.month - 1]}'
+      '${d.year == today.utc.year ? '' : ' ${d.year}'}';
+  final short = _weekdaysShort[d.weekday - 1];
+  if (days == 0) return (title: 'Сегодня', sub: '$short, $date');
+  if (days == 1) return (title: 'Завтра', sub: '$short, $date');
+  return (title: _weekdays[d.weekday - 1], sub: date);
+}
+
 String _dayLabel(LocalDate due, LocalDate today) {
   final days = due.utc.difference(today.utc).inDays;
   if (days == 0) return 'Сегодня';
@@ -49,7 +73,7 @@ String _dayLabel(LocalDate due, LocalDate today) {
 
 /// Figma «Карточка дела»: check and a title with a due line. The whole
 /// card drags to reorder; deleting lives in the detail panel.
-/// Padding 12/16, radius 14, 1px border; done titles are struck through.
+/// Padding 12/16, radius 14; flat, done titles are struck through.
 class TaskRow extends StatefulWidget {
   final TaskItem task;
   final VoidCallback onToggle, onOpen;
@@ -64,6 +88,9 @@ class TaskRow extends StatefulWidget {
 
   /// Marks a new task among overdue ones; null for every other card.
   final BeamStyle? beam;
+
+  /// The task's list, shown as a coloured pill after the due line.
+  final TaskList? list;
   const TaskRow({
     super.key,
     required this.task,
@@ -74,6 +101,7 @@ class TaskRow extends StatefulWidget {
     this.selected = false,
     this.today,
     this.beam,
+    this.list,
   });
   @override
   State<TaskRow> createState() => _TaskRowState();
@@ -132,6 +160,10 @@ class _TaskRowState extends State<TaskRow> {
           style: theme.textTheme.bodySmall!.copyWith(color: metaColor),
         ),
       ],
+      if (widget.list != null) ...[
+        const SizedBox(width: 8),
+        ListPill(widget.list!),
+      ],
       if (task.recurrenceRuleId != null) ...[
         if (task.dueDate != null) const SizedBox(width: 10),
         DayIcon(DayGlyph.repeat, size: 14, color: c.muted),
@@ -179,9 +211,15 @@ class _TaskRowState extends State<TaskRow> {
                   // card lifts as the same white card, no colour jump.
                   : hovered || (pressed && !isPhone(context))
                   ? c.hover
-                  : c.card,
+                  // Figma: rows are flat; only a highlighted new one keeps
+                  // the card (a dragged or swiped row gets it from outside).
+                  : widget.beam != null
+                  ? c.card
+                  : Colors.transparent,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: c.border),
+              border: Border.all(
+                color: widget.beam != null ? c.border : Colors.transparent,
+              ),
             ),
             child: Material(
               type: MaterialType.transparency,
@@ -209,14 +247,20 @@ class _TaskRowState extends State<TaskRow> {
                       children: [
                         Semantics(
                           checked: task.completed,
-                          label: task.completed
+                          label: task.isEvent
+                              ? 'Убрать событие'
+                              : task.completed
                               ? 'Вернуть задачу'
                               : 'Выполнить задачу',
                           child: FluidSurface(
                             sound: null,
                             pressScale: .86,
                             child: Tooltip(
-                              message: task.completed ? 'Вернуть' : 'Выполнить',
+                              message: task.isEvent
+                                  ? 'Убрать'
+                                  : task.completed
+                                  ? 'Вернуть'
+                                  : 'Выполнить',
                               child: InkResponse(
                                 onTap: widget.onToggle,
                                 radius: 20,
@@ -226,7 +270,9 @@ class _TaskRowState extends State<TaskRow> {
                                   width: 44,
                                   height: 44,
                                   child: Center(
-                                    child: CheckCircle(checked: task.completed),
+                                    child: task.isEvent
+                                        ? const EventDot()
+                                        : CheckCircle(checked: task.completed),
                                   ),
                                 ),
                               ),
@@ -274,6 +320,56 @@ class _TaskRowState extends State<TaskRow> {
               ),
             ),
           )),
+        ),
+      ),
+    );
+  }
+}
+
+/// Figma «Событие»: a coloured dot where a task has its check.
+class EventDot extends StatelessWidget {
+  const EventDot({super.key});
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 8,
+    height: 8,
+    decoration: const BoxDecoration(
+      color: Color(0xffff6b57),
+      shape: BoxShape.circle,
+    ),
+  );
+}
+
+/// Parses «#RRGGBB»; the neutral list colour when it is not one.
+Color listColor(TaskList list) {
+  final hex = list.tint.replaceFirst('#', '');
+  final value = int.tryParse(hex, radix: 16);
+  return hex.length == 6 && value != null
+      ? Color(0xff000000 | value)
+      : const Color(0xff8c9b7a);
+}
+
+/// Figma «Метка списка»: the list's name on a tint of its own colour.
+class ListPill extends StatelessWidget {
+  final TaskList list;
+  const ListPill(this.list, {super.key});
+  @override
+  Widget build(BuildContext context) {
+    final base = listColor(list);
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
+      decoration: BoxDecoration(
+        color: base.withValues(alpha: dark ? .18 : .14),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Text(
+        list.name,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: Theme.of(context).textTheme.bodySmall!.copyWith(
+          fontWeight: FontWeight.w500,
+          color: Color.lerp(base, dark ? Colors.white : Colors.black, .3),
         ),
       ),
     );

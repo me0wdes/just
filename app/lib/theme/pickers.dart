@@ -6,6 +6,7 @@ import '../platform/feedback_service.dart';
 import 'app_theme.dart';
 import 'controls.dart';
 import 'day_icon.dart';
+import 'day_sheet.dart';
 import 'day_sound.dart';
 import 'fluid_surface.dart';
 
@@ -29,10 +30,7 @@ const _months = [
 Future<DateTime?> showDayDatePicker(
   BuildContext context, {
   required DateTime initial,
-}) => showDialog<DateTime>(
-  context: context,
-  builder: (_) => _DatePicker(initial),
-);
+}) => showDayPanel<DateTime>(context, (_) => _DatePicker(initial));
 
 class _DatePicker extends StatefulWidget {
   final DateTime initial;
@@ -69,7 +67,7 @@ class _DatePickerState extends State<_DatePicker> {
         child: DayIcon(DayGlyph.down, size: 18, color: c.text),
       ),
     );
-    return Dialog(
+    return DayPanel(
       clipBehavior: Clip.antiAlias,
       insetPadding: phone
           ? const EdgeInsets.symmetric(horizontal: 16, vertical: 24)
@@ -234,9 +232,9 @@ Future<TimeOfDay?> showDayTimePicker(
   required TimeOfDay initial,
   String title = 'Время',
   String cancelText = 'Отмена',
-}) => showDialog<TimeOfDay>(
-  context: context,
-  builder: (_) => _TimePicker(initial, title, cancelText),
+}) => showDayPanel<TimeOfDay>(
+  context,
+  (_) => _TimePicker(initial, title, cancelText),
 );
 
 class _TimePicker extends StatefulWidget {
@@ -284,7 +282,7 @@ class _TimePickerState extends State<_TimePicker> {
         ),
       ),
     );
-    return Dialog(
+    return DayPanel(
       clipBehavior: Clip.antiAlias,
       child: SizedBox(
         width: 328,

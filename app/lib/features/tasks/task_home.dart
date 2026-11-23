@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_timezone/flutter_timezone.dart';
 
 import '../../domain/models.dart';
 import '../../platform/feedback_service.dart';
@@ -20,7 +21,9 @@ import '../../theme/motion_tokens.dart';
 import '../../theme/segments.dart';
 import 'beam_border.dart';
 import 'greeting_header.dart' show FlowPalette;
+import '../../theme/day_sheet.dart';
 import 'list_panel.dart';
+import 'swipe_row.dart';
 import 'task_composer.dart';
 import 'task_controller.dart';
 import 'task_detail_panel.dart';
@@ -77,7 +80,6 @@ class _TaskHomeState extends State<TaskHome> {
   /// press (menu) from a drag (reorder).
   Offset? pressAt;
   double pressMoved = 0;
-  void Function(Offset)? pressMenu;
   bool desktopLayout = true;
   TaskController get c => widget.controller;
   @override
@@ -108,7 +110,18 @@ class _TaskHomeState extends State<TaskHome> {
     super.dispose();
   }
 
+  /// The list a card shows as a pill; none inside a list or for «Без списка».
+  TaskList? pillList(TaskItem task) {
+    if (c.query.view == TaskView.list) return null;
+    final id = task.listIds.firstOrNull;
+    return id == null || id == inboxId
+        ? null
+        : c.lists.where((l) => l.id == id).firstOrNull;
+  }
+
   Future<void> toggle(TaskItem task) async {
+    // An event is only a nudge: ticking its dot clears it (undo in the toast).
+    if (task.isEvent) return remove(task);
     try {
       if (task.completed) {
         await c.undoCompletion(task.id, task.completionId!);
@@ -182,6 +195,66 @@ class _TaskHomeState extends State<TaskHome> {
     ]);
   }
 
+  /// Phone «Сменить список»: a bottom sheet instead of the desktop menu.
+  Future<void> moveSheet(TaskItem task) async {
+    final current = task.listIds.firstOrNull ?? inboxId;
+    DaySound.play(context, UiSound.open);
+    final picked = await showDaySheet<TaskList>(
+      context,
+      builder: (sheet) {
+        final colors = DayColors.of(sheet);
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 4, 10, 8),
+              child: Text(
+                'Сменить список',
+                style: Theme.of(sheet).textTheme.titleMedium,
+              ),
+            ),
+            for (final list in c.lists)
+              InkWell(
+                borderRadius: BorderRadius.circular(14),
+                onTap: () => Navigator.pop(sheet, list),
+                child: Container(
+                  height: 56,
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  decoration: BoxDecoration(
+                    color: list.id == current
+                        ? colors.text.withValues(alpha: .08)
+                        : null,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Row(
+                    children: [
+                      DayIcon(listGlyph(list.icon), size: 20, color: colors.text),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Text(
+                          TaskController.listTitle(list),
+                          style: Theme.of(sheet).textTheme.bodyLarge,
+                        ),
+                      ),
+                      if (list.id == current)
+                        DayIcon(DayGlyph.check, size: 20, color: colors.text),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+    if (picked == null || picked.id == current || !mounted) return;
+    await c.patchTask(task.id, {
+      'listIds': picked.id == inboxId ? <String>[] : [picked.id],
+    });
+    if (!mounted) return;
+    DayToast.show(context, 'Перенесено: ${TaskController.listTitle(picked)}');
+  }
+
   Future<void> remove(TaskItem task) async {
     DaySound.play(context, UiSound.delete);
     if (c.selectedId == task.id) c.select(null);
@@ -202,6 +275,25 @@ class _TaskHomeState extends State<TaskHome> {
     }
     c.select(task.id);
     if (inline) return;
+    // A phone opens the task as a page of its own, like the settings.
+    if (isPhone(context)) {
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute(
+          builder: (context) => TaskDetailPanel(
+            task: task,
+            controller: c,
+            fullScreen: true,
+            onRequestReminder: widget.onRequestReminder,
+            onClose: () => Navigator.pop(context),
+          ),
+        ),
+      );
+      if (mounted) {
+        DaySound.play(context, UiSound.close);
+        c.select(null);
+      }
+      return;
+    }
     await showDialog<void>(
       context: context,
       animationStyle: const AnimationStyle(
@@ -291,14 +383,52 @@ class _TaskHomeState extends State<TaskHome> {
         t.dueDate != null && t.dueDate!.compareTo(today) < 0;
     final grouped =
         !showCompleted && c.query.view == TaskView.today && c.day == today;
-    final entries = <Object>[
-      if (grouped) ...[
-        ...items.where((t) => !leftOver(t)),
-        if (items.any(leftOver)) _overdueLabel,
-        ...items.where(leftOver),
-      ] else
-        ...items,
-    ];
+    // Figma «Предстоящие»: the open tasks of every day on one road, a
+    // heading per day, what is left over from earlier days first.
+    final roadmap = !showCompleted && c.query.view == TaskView.all;
+    final entries = <Object>[];
+    if (roadmap) {
+      final sorted = [...items]
+        ..sort((a, b) {
+          final byDay = (a.dueDate?.value ?? '9999').compareTo(
+            b.dueDate?.value ?? '9999',
+          );
+          return byDay != 0 ? byDay : a.position.compareTo(b.position);
+        });
+      String? last;
+      for (final t in sorted) {
+        final key = leftOver(t) ? 'over' : (t.dueDate?.value ?? 'later');
+        if (key != last) {
+          last = key;
+          entries.add(
+            key == 'over'
+                ? _Group(
+                    key,
+                    'Просроченные',
+                    count: sorted.where(leftOver).length,
+                    red: true,
+                  )
+                : t.dueDate == null
+                ? _Group(key, 'Позже')
+                : _Group(
+                    key,
+                    dayHeading(t.dueDate!, today).title,
+                    sub: dayHeading(t.dueDate!, today).sub,
+                  ),
+          );
+        }
+        entries.add(t);
+      }
+    } else if (grouped) {
+      entries
+        ..addAll(items.where((t) => !leftOver(t)))
+        ..addAll([
+          if (items.any(leftOver)) _overdueLabel,
+          ...items.where(leftOver),
+        ]);
+    } else {
+      entries.addAll(items);
+    }
     // Overdue cards sit below; the day's own cards, until opened, carry the
     // header's palette as a thin comet so they are not taken for old ones.
     final lit = grouped && items.any(leftOver)
@@ -334,13 +464,6 @@ class _TaskHomeState extends State<TaskHome> {
         animation: animation,
         child: child,
         builder: (context, child) {
-          // Touch, held without moving: the menu's own lifted card takes
-          // over at once, so this copy does not sink back under it.
-          if (!desktopLayout &&
-              animation.status == AnimationStatus.reverse &&
-              pressMoved < 12) {
-            return const SizedBox.shrink();
-          }
           final t = Curves.easeOut.transform(animation.value);
           final from = desktopLayout ? 1.0 : .97,
               to = desktopLayout ? 1.015 : liftScale;
@@ -359,6 +482,11 @@ class _TaskHomeState extends State<TaskHome> {
                       bottom: 8,
                       child: DecoratedBox(
                         decoration: BoxDecoration(
+                          // A flat row needs a body to lift.
+                          color: DayColors.of(context).card,
+                          border: Border.all(
+                            color: DayColors.of(context).border,
+                          ),
                           borderRadius: BorderRadius.circular(14),
                           boxShadow: [
                             BoxShadow(
@@ -379,16 +507,8 @@ class _TaskHomeState extends State<TaskHome> {
         },
       ),
       onReorderStart: (_) => DaySound.play(context, UiSound.tap),
-      // Touch: a long press that never moved opens the card's menu, the way
-      // a right click does on a computer; a moved one reorders.
-      onReorderEnd: (_) {
-        final at = pressAt, menu = pressMenu;
-        if (!desktopLayout && at != null && menu != null && pressMoved < 12) {
-          HapticFeedback.selectionClick();
-          menu(at);
-        }
-        pressAt = null;
-      },
+      // Touch: a long press only drags; editing is a swipe to the left.
+      onReorderEnd: (_) => pressAt = null,
       onReorderItem: (oldIndex, newIndex) {
         if (!desktopLayout && pressMoved < 12) return;
         if (showCompleted || entries[oldIndex] is! TaskItem) return;
@@ -406,18 +526,13 @@ class _TaskHomeState extends State<TaskHome> {
       itemBuilder: (context, index) {
         final entry = entries[index];
         if (entry is! TaskItem) {
+          final group = entry is _Group ? entry : null;
           return KeyedSubtree(
-            key: const ValueKey('overdue-label'),
+            key: ValueKey('group-${group?.id ?? 'overdue'}'),
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
-              child: Text(
-                'Просроченные',
-                style: Theme.of(context).textTheme.bodyMedium!.copyWith(
-                  fontSize: 15,
-                  height: 20 / 15,
-                  fontWeight: FontWeight.w500,
-                  color: DayColors.of(context).muted,
-                ),
+              padding: EdgeInsets.fromLTRB(14, index == 0 ? 0 : 8, 14, 8),
+              child: _GroupLabel(
+                group ?? const _Group('over', 'Просроченные'),
               ),
             ),
           );
@@ -431,13 +546,12 @@ class _TaskHomeState extends State<TaskHome> {
           task: task,
           selected: c.selectedId == task.id,
           today: c.query.today,
+          list: pillList(task),
           beam: lit.contains(task.id)
               ? BeamStyle(palette, lit.indexOf(task.id))
               : null,
           onToggle: () => toggle(task),
           onOpen: () => open(task, inline),
-          // A finished card cannot be dragged, so its long press is free.
-          longPressMenu: !desktop && task.completed,
           onMenu: (at) => showDayMenu(
             context,
             at,
@@ -489,22 +603,26 @@ class _TaskHomeState extends State<TaskHome> {
                               enabled: !task.completed,
                               child: held,
                             )
-                          : Listener(
-                              onPointerDown: (e) {
-                                pressAt = e.position;
-                                pressMoved = 0;
-                                pressMenu = row.onMenu;
-                              },
-                              onPointerMove: (e) {
-                                final start = pressAt;
-                                if (start == null) return;
-                                final d = (e.position - start).distance;
-                                if (d > pressMoved) pressMoved = d;
-                              },
-                              child: ReorderableDelayedDragStartListener(
-                                index: index,
-                                enabled: !task.completed,
-                                child: held,
+                          : SwipeRow(
+                              onEdit: () => open(task, inline),
+                              onMove: () => moveSheet(task),
+                              onDelete: () => remove(task),
+                              child: Listener(
+                                onPointerDown: (e) {
+                                  pressAt = e.position;
+                                  pressMoved = 0;
+                                },
+                                onPointerMove: (e) {
+                                  final start = pressAt;
+                                  if (start == null) return;
+                                  final d = (e.position - start).distance;
+                                  if (d > pressMoved) pressMoved = d;
+                                },
+                                child: ReorderableDelayedDragStartListener(
+                                  index: index,
+                                  enabled: !task.completed,
+                                  child: held,
+                                ),
                               ),
                             ),
                     ),
@@ -695,9 +813,19 @@ class _TaskHomeState extends State<TaskHome> {
           // empty space under it only looks like a hole.
           TaskComposer(
             focusNode: composer,
-            onAdd: (text) async {
+            onAdd: (text, time) async {
               setState(() => showCompleted = false);
-              await c.addTask(text);
+              if (time == null) {
+                await c.addTask(text);
+                return;
+              }
+              // An event also asks for notification access, once.
+              String? zone;
+              if (widget.onRequestReminder == null ||
+                  await widget.onRequestReminder!()) {
+                zone = (await FlutterTimezone.getLocalTimezone()).identifier;
+              }
+              await c.addEvent(text, time, zone: zone);
             },
           ),
         ],
@@ -1163,6 +1291,47 @@ class _DetailSlot extends StatelessWidget {
     ),
     child: child ?? const SizedBox.shrink(key: ValueKey('empty')),
   );
+}
+
+/// A day heading in «Предстоящие»; [red] marks the overdue one.
+class _Group {
+  final String id, title;
+  final String? sub;
+  final int? count;
+  final bool red;
+  const _Group(this.id, this.title, {this.sub, this.count, this.red = false});
+}
+
+class _GroupLabel extends StatelessWidget {
+  final _Group group;
+  const _GroupLabel(this.group);
+  @override
+  Widget build(BuildContext context) {
+    final c = DayColors.of(context);
+    final base = Theme.of(context).textTheme.bodyMedium!.copyWith(
+      fontSize: 15,
+      height: 20 / 15,
+      color: c.muted,
+    );
+    final head = group.red ? c.overdue : c.muted;
+    return Text.rich(
+      TextSpan(
+        children: [
+          TextSpan(
+            text: group.title,
+            style: base.copyWith(fontWeight: FontWeight.w500, color: head),
+          ),
+          if (group.count != null)
+            TextSpan(
+              text: '  ${group.count}',
+              style: base.copyWith(fontWeight: FontWeight.w500, color: head),
+            ),
+          if (group.sub != null) TextSpan(text: '  ${group.sub}'),
+        ],
+      ),
+      style: base,
+    );
+  }
 }
 
 /// New rows fade in and rise a few pixels; existing rows never replay it.

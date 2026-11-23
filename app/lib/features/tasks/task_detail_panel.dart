@@ -26,12 +26,17 @@ class TaskDetailPanel extends StatefulWidget {
   final TaskController controller;
   final VoidCallback onClose;
   final Future<bool> Function()? onRequestReminder;
+
+  /// A phone opens the task as a page, like «Настройки»: a back button and
+  /// «Задача» in the header instead of «Детали задачи» and a cross.
+  final bool fullScreen;
   const TaskDetailPanel({
     super.key,
     required this.task,
     required this.controller,
     required this.onClose,
     this.onRequestReminder,
+    this.fullScreen = false,
   });
   @override
   State<TaskDetailPanel> createState() => _TaskDetailPanelState();
@@ -348,27 +353,57 @@ class _TaskDetailPanelState extends State<TaskDetailPanel> {
       child: SafeArea(
         child: Column(
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 14, 12, 10),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Детали задачи',
-                      style: theme.textTheme.titleMedium!.copyWith(
-                        color: c.text,
+            if (widget.fullScreen) ...[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(8, 14, 20, 12),
+                child: Row(
+                  children: [
+                    DayButton.icon(
+                      tooltip: 'Назад',
+                      sound: null,
+                      onPressed: widget.onClose,
+                      icon: RotatedBox(
+                        quarterTurns: 1,
+                        child: DayIcon(DayGlyph.down, size: 20, color: c.text),
                       ),
                     ),
-                  ),
-                  DayButton.icon(
-                    tooltip: 'Закрыть',
-                    sound: null,
-                    onPressed: widget.onClose,
-                    icon: DayIcon(DayGlyph.close, size: 18, color: c.text),
-                  ),
-                ],
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Задача',
+                        style: theme.textTheme.titleLarge!.copyWith(
+                          color: c.text,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
+              Divider(height: 1, thickness: 1, color: c.border),
+              const SizedBox(height: 8),
+            ] else
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 14, 12, 10),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Детали задачи',
+                        style: theme.textTheme.titleMedium!.copyWith(
+                          color: c.text,
+                        ),
+                      ),
+                    ),
+                    DayButton.icon(
+                      tooltip: 'Закрыть',
+                      sound: null,
+                      onPressed: widget.onClose,
+                      icon: DayIcon(DayGlyph.close, size: 18, color: c.text),
+                    ),
+                  ],
+                ),
+              ),
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(10, 0, 10, 16),

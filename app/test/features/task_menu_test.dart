@@ -8,6 +8,7 @@ import 'package:day_planner/domain/models.dart';
 import 'package:day_planner/features/tasks/beam_border.dart';
 import 'package:day_planner/features/tasks/task_controller.dart';
 import 'package:day_planner/features/tasks/task_home.dart';
+import 'package:day_planner/features/tasks/task_row.dart';
 import 'package:day_planner/platform/feedback_service.dart';
 
 void main() {
@@ -163,7 +164,7 @@ void main() {
     expect(find.byTooltip('Действия со списком'), findsNothing);
     await tester.tap(find.text('Дом'), buttons: kSecondaryButton);
     await tester.pumpAndSettle();
-    expect(find.text('Переименовать'), findsOneWidget);
+    expect(find.text('Изменить'), findsOneWidget);
     await tester.tap(find.text('Удалить список'));
     await tester.pumpAndSettle();
     expect(find.text('Дом'), findsNothing);
@@ -206,6 +207,90 @@ void main() {
     await tester.tap(find.text('Создать'));
     await tester.pumpAndSettle();
     expect(c.lists.firstWhere((l) => l.name == 'Покупки').icon, 'cart');
+    // …and its colour: the dialog offers the palette.
+    await tester.tap(find.text('Новый список'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, 'Здоровье');
+    await tester.tap(find.byKey(const ValueKey('list-color-#F59E40')));
+    await tester.tap(find.text('Создать'));
+    await tester.pumpAndSettle();
+    expect(
+      c.lists.firstWhere((l) => l.name == 'Здоровье').color.toUpperCase(),
+      '#F59E40',
+    );
+    await tester.pumpWidget(const SizedBox());
+    c.dispose();
+    await db.close();
+  });
+
+  testWidgets('«Предстоящие» puts every day under its own heading', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final db = AppDatabase.memory(workspaceId: 'local');
+    final repo = SqliteTaskRepository(db);
+    for (final (id, title, day) in [
+      ('a', 'Давнее дело', '2026-10-17'),
+      ('b', 'Дело на сегодня', '2026-10-19'),
+      ('c', 'Дело на завтра', '2026-10-20'),
+    ]) {
+      await repo.execute(
+        TaskCommand.createTask(
+          id: id,
+          title: title,
+          listId: inboxId,
+          fields: {'dueDate': day},
+        ),
+      );
+    }
+    final c = TaskController(
+      repo,
+      feedback: const SilentCompletionFeedback(),
+      today: () => LocalDate.parse('2026-10-19'),
+    );
+    await tester.pumpWidget(MaterialApp(home: TaskHome(controller: c)));
+    await tester.pumpAndSettle();
+    c.navigate(TaskView.all);
+    await tester.pumpAndSettle();
+    double y(String t) => tester.getTopLeft(find.text(t)).dy;
+    expect(find.textContaining('Просроченные'), findsOneWidget);
+    expect(find.textContaining('Сегодня'), findsWidgets);
+    expect(find.textContaining('Завтра'), findsOneWidget);
+    expect(y('Давнее дело') < y('Дело на сегодня'), true);
+    expect(y('Дело на сегодня') < y('Дело на завтра'), true);
+    await tester.pumpWidget(const SizedBox());
+    c.dispose();
+    await db.close();
+  });
+
+  testWidgets('an event shows a dot instead of a check', (tester) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final db = AppDatabase.memory(workspaceId: 'local');
+    final repo = SqliteTaskRepository(db);
+    await repo.execute(
+      TaskCommand.createTask(
+        id: 'e',
+        title: 'Созвон с Аней',
+        listId: inboxId,
+        fields: {'kind': 'event', 'dueDate': '2026-10-19', 'dueTime': '19:00'},
+      ),
+    );
+    final c = TaskController(
+      repo,
+      feedback: const SilentCompletionFeedback(),
+      today: () => LocalDate.parse('2026-10-19'),
+    );
+    await tester.pumpWidget(MaterialApp(home: TaskHome(controller: c)));
+    await tester.pumpAndSettle();
+    expect(find.text('Созвон с Аней'), findsOneWidget);
+    expect(find.byType(EventDot), findsOneWidget);
+    expect(find.byType(CheckCircle), findsNothing);
     await tester.pumpWidget(const SizedBox());
     c.dispose();
     await db.close();

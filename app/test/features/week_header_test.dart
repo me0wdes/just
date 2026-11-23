@@ -140,7 +140,7 @@ void main() {
     c.dispose();
     await db.close();
   });
-  testWidgets('picking a day in «Все задачи» filters without leaving it', (
+  testWidgets('picking a day in «Предстоящие» filters without leaving it', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(1280, 900);
@@ -217,7 +217,7 @@ void main() {
     await db.close();
   });
 
-  testWidgets('on a phone a long press without moving opens the task menu', (
+  testWidgets('on a phone a swipe to the left opens the task actions', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(375, 812);
@@ -240,10 +240,12 @@ void main() {
     );
     await tester.pumpWidget(MaterialApp(home: TaskHome(controller: c)));
     await tester.pumpAndSettle();
-    await tester.longPress(find.text('Подержать меня'));
+    expect(find.text('Изменить'), findsNothing);
+    await tester.drag(find.text('Подержать меня'), const Offset(-220, 0));
     await tester.pumpAndSettle();
+    expect(find.text('Изменить'), findsOneWidget);
+    expect(find.text('Список'), findsOneWidget);
     expect(find.text('Удалить'), findsOneWidget);
-    expect(find.text('Выполнить'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
     c.dispose();
     await db.close();

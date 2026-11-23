@@ -8,6 +8,7 @@ import 'validation.dart';
 const taskSnapshotFields = {
   'id',
   'title',
+  'kind',
   'note',
   'listId',
   'listIds',
@@ -128,6 +129,8 @@ Map<String, Object?> validateSnapshot(String type, Map<String, Object?> value) {
       if (v is! String || !RegExp(r'^#[0-9a-fA-F]{6}$').hasMatch(v)) {
         throw const FormatException('Неверный цвет');
       }
+    } else if (k == 'kind' && !['task', 'event'].contains(v)) {
+      throw const FormatException('Неверный вид записи');
     } else if (k == 'frequency' &&
         !['daily', 'weekly', 'monthly'].contains(v)) {
       throw const FormatException('Неверный повтор');

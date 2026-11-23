@@ -227,13 +227,13 @@ class _WeekHeaderState extends State<WeekHeader> {
     final totalLabel = filter != null
         ? '${dayName(filter, today)}, ${filter.utc.day} ${_months[filter.utc.month - 1]}'
         : c.query.view == TaskView.all
-        ? 'Всего'
+        ? 'Предстоящие'
         : c.heading;
     final progress = c.weekProgress();
     final openCount = c.tasks.where((t) => !t.completed).length;
     final count =
         '$openCount ${_plural(openCount, 'задача', 'задачи', 'задач')}';
-    // «Сегодня, 28 октября»; «Всего 6 задач», «Работа · 6 задач»; true
+    // «Сегодня, 28 октября»; «Предстоящие · 6 задач», «Работа · 6 задач»; true
     // marks the muted part.
     final island = dayView
         ? [
@@ -241,7 +241,7 @@ class _WeekHeaderState extends State<WeekHeader> {
             (', ${picked.utc.day} ${_months[picked.utc.month - 1]}', true),
           ]
         : [
-            (totalLabel + (totalLabel == 'Всего' ? ' ' : ' · '), true),
+            ('$totalLabel · ', true),
             (count, false),
           ];
     Widget strip(LocalDate start, {VoidCallback? onClose, bool bare = false}) =>

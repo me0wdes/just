@@ -45,6 +45,11 @@ class TaskItem {
     return listId == inboxId ? const [] : [listId];
   }
 
+  /// «task» (default) or «event»: a reminder with a time that has no
+  /// checkbox and is cleared out when its day ends.
+  String get kind => _data['kind'] as String? ?? 'task';
+  bool get isEvent => kind == 'event';
+
   LocalDate? get dueDate => _date('dueDate');
 
   /// Optional "HH:MM" on [dueDate]; null means the whole day.
@@ -99,13 +104,33 @@ class TaskItem {
   Map<String, Object?> toJson() => Map.of(_data);
 }
 
+/// The colours a list can take; the first is the neutral default that
+/// older lists carry, so those get a colour of the rest from their id.
+const defaultListColor = '#8C9B7A';
+const listPalette = [
+  defaultListColor,
+  '#40AD6B',
+  '#5C8CF0',
+  '#A67AEB',
+  '#F59E40',
+  '#EB5C57',
+  '#E86FA6',
+  '#38B2B2',
+];
+
 class TaskList {
   final Map<String, Object?> _data;
   TaskList.fromJson(Map<String, Object?> data)
     : _data = Map.unmodifiable({...data});
   String get id => _data['id'] as String;
   String get name => _data['name'] as String;
-  String get color => _data['color'] as String? ?? '#8C9B7A';
+  String get color => _data['color'] as String? ?? defaultListColor;
+
+  /// What is drawn: a list that never picked a colour gets a stable one
+  /// from its id, the same on every device.
+  String get tint => color.toUpperCase() == defaultListColor
+      ? listPalette[1 + id.codeUnits.fold(0, (a, b) => a + b) % 7]
+      : color;
 
   /// Key of an ItsHover list icon (`list-<key>.svg`); older lists have none.
   String get icon => _data['icon'] as String? ?? 'stack';

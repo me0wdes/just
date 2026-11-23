@@ -4,12 +4,14 @@ import '../../domain/models.dart';
 import '../../platform/feedback_service.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/day_icon.dart';
+import '../../theme/day_sheet.dart';
 import '../../theme/controls.dart';
 import '../../theme/day_sound.dart';
 import '../../theme/fluid_button.dart';
 import '../../theme/fluid_surface.dart';
 import '../../theme/motion_tokens.dart';
 import 'task_controller.dart';
+import 'task_row.dart' show listColor;
 
 /// Sidebar card: views, personal lists and settings. The selection pill
 /// slides between rows instead of jumping.
@@ -30,12 +32,17 @@ class ListPanel extends StatelessWidget {
   final Widget? status;
   Future<void> edit(BuildContext context, {TaskList? list}) async {
     DaySound.play(context, UiSound.open);
-    final result = await showDialog<(String, String)>(
-      context: context,
-      builder: (_) => _ListDialog(list: list),
+    final result = await showDayPanel<(String, String, String)>(
+      context,
+      (_) => _ListDialog(list: list, fresh: controller.nextListColor),
     );
     if (result == null || result.$1.trim().isEmpty) return;
-    await controller.saveList(list?.id, result.$1, icon: result.$2);
+    await controller.saveList(
+      list?.id,
+      result.$1,
+      icon: result.$2,
+      color: result.$3,
+    );
     if (context.mounted) {
       DaySound.play(context, list == null ? UiSound.add : UiSound.tap);
     }
@@ -59,6 +66,7 @@ class ListPanel extends StatelessWidget {
       bool selected,
       VoidCallback tap, {
       void Function(Offset at)? onMenu,
+      Color? tint,
     }) {
       if (selected) selectedTop = y;
       rows.add(
@@ -67,6 +75,7 @@ class ListPanel extends StatelessWidget {
           child: _NavItem(
             title: title,
             icon: icon,
+            tint: tint,
             selected: selected,
             height: extent,
             onMenu: onMenu,
@@ -107,23 +116,24 @@ class ListPanel extends StatelessWidget {
       () => controller.navigate(TaskView.today),
     );
     item(
-      'Все задачи',
-      DayGlyph.tasks,
+      'Предстоящие',
+      DayGlyph.deadline,
       q.view == TaskView.all,
       () => controller.navigate(TaskView.all),
     );
     label('Мои списки');
-    // Tasks without a list live in «Все задачи»; the inbox has no entry.
+    // Tasks without a list live in «Предстоящие»; the inbox has no entry.
     for (final list in controller.lists.where((l) => l.id != inboxId)) {
       item(
         list.name,
         listGlyph(list.icon),
         q.view == TaskView.list && q.listId == list.id,
         () => controller.navigate(TaskView.list, listId: list.id),
+        tint: listColor(list),
         // Right click (long press on touch) instead of a «…» button.
         onMenu: (at) => showDayMenu(context, at, [
           DayMenuItem(
-            'Переименовать',
+            'Изменить',
             DayGlyph.note,
             () => edit(context, list: list),
           ),
@@ -234,9 +244,13 @@ class _NavItem extends StatefulWidget {
   final VoidCallback onTap;
   final void Function(Offset at)? onMenu;
   final UiSound? sound;
+
+  /// A list's own colour for its icon; null keeps the menu's grey/white.
+  final Color? tint;
   const _NavItem({
     required this.title,
     required this.icon,
+    this.tint,
     required this.selected,
     required this.height,
     required this.onTap,
@@ -284,7 +298,7 @@ class _NavItemState extends State<_NavItem> {
                 child: Row(
                   children: [
                     const SizedBox(width: 12),
-                    DayIcon(widget.icon, size: 20, color: fg),
+                    DayIcon(widget.icon, size: 20, color: widget.tint ?? fg),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
@@ -313,7 +327,10 @@ class _NavItemState extends State<_NavItem> {
 /// «Новый список» / «Список»: name and icon together, as in Figma.
 class _ListDialog extends StatefulWidget {
   final TaskList? list;
-  const _ListDialog({this.list});
+
+  /// The colour a new list starts with.
+  final String fresh;
+  const _ListDialog({this.list, required this.fresh});
   @override
   State<_ListDialog> createState() => _ListDialogState();
 }
@@ -321,19 +338,20 @@ class _ListDialog extends StatefulWidget {
 class _ListDialogState extends State<_ListDialog> {
   late final name = TextEditingController(text: widget.list?.name);
   late String icon = widget.list?.icon ?? 'stack';
+  late String color = (widget.list?.tint ?? widget.fresh).toUpperCase();
   @override
   void dispose() {
     name.dispose();
     super.dispose();
   }
 
-  void submit() => Navigator.pop(context, (name.text, icon));
+  void submit() => Navigator.pop(context, (name.text, icon, color));
 
   @override
   Widget build(BuildContext context) {
     final c = DayColors.of(context);
     final theme = Theme.of(context);
-    return Dialog(
+    return DayPanel(
       child: SizedBox(
         width: 400,
         child: Padding(
@@ -367,6 +385,24 @@ class _ListDialogState extends State<_ListDialog> {
                 selected: icon,
                 onPick: (key) => setState(() => icon = key),
               ),
+              const SizedBox(height: 16),
+              Text(
+                'Цвет',
+                style: theme.textTheme.bodySmall!.copyWith(color: c.muted),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  for (final hex in listPalette)
+                    _ColorDot(
+                      hex: hex,
+                      selected: hex == color,
+                      onTap: () => setState(() => color = hex),
+                    ),
+                ],
+              ),
               const SizedBox(height: 20),
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
@@ -383,6 +419,52 @@ class _ListDialogState extends State<_ListDialog> {
                 ],
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// One colour of the list dialog: a dot, ringed when it is the one chosen.
+class _ColorDot extends StatelessWidget {
+  final String hex;
+  final bool selected;
+  final VoidCallback onTap;
+  const _ColorDot({
+    required this.hex,
+    required this.selected,
+    required this.onTap,
+  });
+  @override
+  Widget build(BuildContext context) {
+    final color = Color(0xff000000 | int.parse(hex.substring(1), radix: 16));
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: 'Цвет $hex',
+      child: FluidSurface(
+        pressScale: .9,
+        child: GestureDetector(
+          key: ValueKey('list-color-$hex'),
+          onTap: onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            width: 30,
+            height: 30,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: selected ? color : Colors.transparent,
+                width: 2,
+              ),
+            ),
+            child: Container(
+              width: 22,
+              height: 22,
+              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+            ),
           ),
         ),
       ),

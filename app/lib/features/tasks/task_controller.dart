@@ -72,6 +72,7 @@ class TaskController extends ChangeNotifier {
     bool dated(LocalDate? d) => d != null && week.contains(d.value);
     final mine = calendar.where(
       (t) =>
+          !t.isEvent &&
           _inView(t) &&
           (dated(t.dueDate) ||
               dated(t.plannedForDate) ||
@@ -118,7 +119,7 @@ class TaskController extends ChangeNotifier {
           _purgeExpired();
           _notify();
         }, onError: _onError);
-    _purge = Timer.periodic(const Duration(minutes: 30), (_) => _purgeExpired());
+    _purge = Timer.periodic(const Duration(minutes: 5), (_) => _purgeExpired());
     _lists = repository.watchLists().listen((value) {
       lists = value;
       _notify();
@@ -134,10 +135,14 @@ class TaskController extends ChangeNotifier {
   /// Done tasks go a week after they were completed; it is an ordinary
   /// delete, so every device ends up with the same list.
   void _purgeExpired() {
-    final now = clock().toUtc();
+    final now = clock().toUtc(), day = today();
     for (final t in calendar) {
       final at = t.expiresAt;
-      if (at == null || at.isAfter(now) || !_purged.add(t.id)) continue;
+      // An event is only a nudge: once its day is over it goes the same way.
+      final over =
+          t.isEvent && t.dueDate != null && t.dueDate!.compareTo(day) < 0;
+      if (!over && (at == null || at.isAfter(now))) continue;
+      if (!_purged.add(t.id)) continue;
       unawaited(
         repository
             .execute(TaskCommand.deleteTask(t.id))
@@ -172,7 +177,7 @@ class TaskController extends ChangeNotifier {
   TaskItem? get selected => tasks.where((t) => t.id == selectedId).firstOrNull;
   String get heading => switch (query.view) {
     TaskView.today => 'Сегодня',
-    TaskView.all => 'Все задачи',
+    TaskView.all => 'Предстоящие',
     TaskView.list =>
       lists.where((l) => l.id == query.listId).map(listTitle).firstOrNull ??
           'Список',
@@ -207,6 +212,41 @@ class TaskController extends ChangeNotifier {
       },
     ),
   );
+  /// An event: a reminder at [time] («HH:MM») on the shown day. With a
+  /// [zone] it also schedules the notification for that moment.
+  Future<CommandReceipt> addEvent(String title, String time, {String? zone}) {
+    final day = this.day.utc;
+    final at = DateTime(
+      day.year,
+      day.month,
+      day.day,
+      int.parse(time.substring(0, 2)),
+      int.parse(time.substring(3)),
+    );
+    return repository.execute(
+      TaskCommand.createTask(
+        id: const Uuid().v4(),
+        title: title,
+        listId: inboxId,
+        fields: {
+          'kind': 'event',
+          if (query.view == TaskView.list && query.listId != inboxId)
+            'listIds': [query.listId!],
+          'position': tasks.isEmpty
+              ? 1024
+              : tasks.map((t) => t.position).reduce((a, b) => a > b ? a : b) +
+                    1024,
+          'dueDate': this.day.toString(),
+          'dueTime': time,
+          if (zone != null && at.isAfter(clock())) ...{
+            'reminderAtUtc': at.toUtc().toIso8601String(),
+            'reminderTimezone': zone,
+          },
+        },
+      ),
+    );
+  }
+
   Future<CommandReceipt> patchTask(String id, Map<String, Object?> changes) =>
       repository.execute(TaskCommand.patchTask(id, changes));
   Future<CommandReceipt> completeTask(String id) async {
@@ -237,19 +277,38 @@ class TaskController extends ChangeNotifier {
       repository.execute(TaskCommand.deleteTask(id));
   Future<CommandReceipt> restoreTask(String id) =>
       repository.execute(TaskCommand.restoreTask(id));
-  Future<CommandReceipt> saveList(String? id, String name, {String? icon}) =>
-      repository.execute(
-        id == null
-            ? TaskCommand.createList(const Uuid().v4(), name, icon: icon)
-            : TaskCommand.patchList(id, {'name': name, 'icon': ?icon}),
-      );
+  Future<CommandReceipt> saveList(
+    String? id,
+    String name, {
+    String? icon,
+    String? color,
+  }) => repository.execute(
+    id == null
+        ? TaskCommand.createList(
+            const Uuid().v4(),
+            name,
+            icon: icon,
+            color: color ?? nextListColor,
+          )
+        : TaskCommand.patchList(id, {
+            'name': name,
+            'icon': ?icon,
+            'color': ?color,
+          }),
+  );
+
+  /// A new list takes the next colour of the palette, so neighbours differ.
+  String get nextListColor =>
+      listPalette[1 + lists.where((l) => l.id != inboxId).length % 7];
   Future<CommandReceipt> setListIcon(String id, String icon) =>
       repository.execute(TaskCommand.patchList(id, {'icon': icon}));
 
   /// Creates a list and returns its id, for the combobox «Создать».
   Future<String> createList(String name) async {
     final id = const Uuid().v4();
-    await repository.execute(TaskCommand.createList(id, name));
+    await repository.execute(
+      TaskCommand.createList(id, name, color: nextListColor),
+    );
     return id;
   }
 
