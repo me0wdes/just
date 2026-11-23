@@ -124,8 +124,9 @@ class _SwipeRowState extends State<SwipeRow>
     return GestureDetector(
       onHorizontalDragUpdate: _update,
       onHorizontalDragEnd: _end,
-      child: ClipRect(
-        child: AnimatedBuilder(
+      // No clip: the card slides on under the screen's edge instead of
+      // being cut off at the list's padding.
+      child: AnimatedBuilder(
           animation: shift,
           builder: (context, child) {
             final x = shift.value;
@@ -202,7 +203,6 @@ class _SwipeRowState extends State<SwipeRow>
             );
           },
           child: widget.child,
-        ),
       ),
     );
   }

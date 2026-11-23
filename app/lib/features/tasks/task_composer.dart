@@ -1,22 +1,36 @@
 import 'package:flutter/material.dart';
 
+import '../../domain/models.dart';
 import '../../platform/feedback_service.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/controls.dart';
 import '../../theme/day_icon.dart';
 import '../../theme/day_sound.dart';
 import '../../theme/fluid_button.dart';
 import '../../theme/fluid_surface.dart';
 import '../../theme/motion_tokens.dart';
 import '../../theme/pickers.dart';
-import 'task_row.dart' show EventDot;
+import 'task_row.dart' show EventDot, dayHeading;
+
+/// What an event is made of: its day and, if the user added one, a time.
+typedef EventDraft = ({LocalDate day, String? time});
 
 /// The add row pinned under the table. The send arrow appears once there is
-/// something to send. Above it a «Задача / Событие» switch: an event also
-/// carries a time («HH:MM», the second argument of [onAdd]).
+/// something to send. At its left a drop-down picks what is made, a task or
+/// an event; an event gets a row above with its day (today by default) and a
+/// button that adds a time.
 class TaskComposer extends StatefulWidget {
   final FocusNode focusNode;
-  final Future<void> Function(String text, String? eventTime) onAdd;
-  const TaskComposer({super.key, required this.focusNode, required this.onAdd});
+
+  /// The day the list shows: an event starts on it.
+  final LocalDate day;
+  final Future<void> Function(String text, EventDraft? event) onAdd;
+  const TaskComposer({
+    super.key,
+    required this.focusNode,
+    required this.day,
+    required this.onAdd,
+  });
   @override
   State<TaskComposer> createState() => _TaskComposerState();
 }
@@ -25,32 +39,65 @@ class _TaskComposerState extends State<TaskComposer> {
   final text = TextEditingController();
   bool saving = false, focused = false, event = false;
   String? error;
-  TimeOfDay time = const TimeOfDay(hour: 9, minute: 0);
+  LocalDate? eventDay;
+  TimeOfDay? time;
 
-  String get timeText =>
-      '${time.hour.toString().padLeft(2, '0')}:'
-      '${time.minute.toString().padLeft(2, '0')}';
+  LocalDate get day => eventDay ?? widget.day;
+
+  String _two(int n) => n.toString().padLeft(2, '0');
+  String get timeText => '${_two(time!.hour)}:${_two(time!.minute)}';
 
   void _setEvent(bool value) {
     if (value == event) return;
     setState(() {
       event = value;
-      if (value) {
-        // The next full hour is the likeliest time for something to come.
-        final hour = DateTime.now().hour;
-        time = TimeOfDay(hour: hour >= 23 ? 23 : hour + 1, minute: 0);
-      }
+      eventDay = null;
+      time = null;
     });
     widget.focusNode.requestFocus();
   }
 
+  Future<void> _pickDay() async {
+    final picked = await showDayDatePicker(context, initial: day.utc);
+    if (picked != null && mounted) {
+      setState(
+        () => eventDay = LocalDate.parse(
+          '${picked.year.toString().padLeft(4, '0')}-'
+          '${_two(picked.month)}-${_two(picked.day)}',
+        ),
+      );
+    }
+  }
+
   Future<void> _pickTime() async {
+    // The next full hour is the likeliest time for something to come.
+    final hour = DateTime.now().hour;
     final picked = await showDayTimePicker(
       context,
-      initial: time,
+      initial: time ?? TimeOfDay(hour: hour >= 23 ? 23 : hour + 1, minute: 0),
       title: 'Время события',
     );
     if (picked != null && mounted) setState(() => time = picked);
+  }
+
+  /// The drop-down under the plus: a task or an event.
+  void _chooseKind(BuildContext box) {
+    final render = box.findRenderObject() as RenderBox;
+    final at = render.localToGlobal(Offset.zero);
+    showDayMenu(box, at, [
+      DayMenuItem(
+        'Задача',
+        DayGlyph.check,
+        () => _setEvent(false),
+        leading: _TaskMark(DayColors.of(box).text),
+      ),
+      DayMenuItem(
+        'Событие',
+        DayGlyph.deadline,
+        () => _setEvent(true),
+        leading: const EventDot(),
+      ),
+    ]);
   }
 
   @override
@@ -70,10 +117,19 @@ class _TaskComposerState extends State<TaskComposer> {
       error = null;
     });
     try {
-      await widget.onAdd(draft, event ? timeText : null);
+      await widget.onAdd(
+        draft,
+        event ? (day: day, time: time == null ? null : timeText) : null,
+      );
       if (mounted) DaySound.play(context, UiSound.add);
       if (mounted && text.text == draft) text.clear();
-      if (mounted) setState(() => event = false);
+      if (mounted) {
+        setState(() {
+          event = false;
+          eventDay = null;
+          time = null;
+        });
+      }
     } catch (e) {
       if (mounted) {
         DaySound.play(context, UiSound.error);
@@ -103,10 +159,9 @@ class _TaskComposerState extends State<TaskComposer> {
     final c = DayColors.of(context);
     final ready = text.text.trim().isNotEmpty;
     final duration = MotionTokens.duration(context, MotionTokens.moderate);
-    // Figma «Поле добавления»: 48 tall, radius 16, plus 22, gap 14.
+    // Figma «Поле добавления»: 48 tall, radius 16, a drop-down, gap 14.
     // A tap anywhere but the field and its send button lets go of focus;
     // touch keeps it by default, so the field stayed lit after adding.
-    final showKind = focused || event;
     return TextFieldTapRegion(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -116,31 +171,23 @@ class _TaskComposerState extends State<TaskComposer> {
             duration: duration,
             curve: MotionTokens.easeOut,
             alignment: Alignment.bottomLeft,
-            child: showKind
+            child: event
                 ? Padding(
                     padding: const EdgeInsets.only(bottom: 8),
                     child: Row(
                       children: [
-                        _KindChip(
-                          label: 'Задача',
-                          selected: !event,
-                          onTap: () => _setEvent(false),
+                        _Chip(
+                          label: dayHeading(day, LocalDate.today()).title,
+                          onTap: _pickDay,
                         ),
                         const SizedBox(width: 8),
-                        _KindChip(
-                          label: 'Событие',
-                          selected: event,
-                          dot: true,
-                          onTap: () => _setEvent(true),
+                        _Chip(
+                          label: time == null ? '+ Время' : timeText,
+                          onTap: _pickTime,
+                          onClear: time == null
+                              ? null
+                              : () => setState(() => time = null),
                         ),
-                        if (event) ...[
-                          const SizedBox(width: 8),
-                          _KindChip(
-                            label: timeText,
-                            selected: false,
-                            onTap: _pickTime,
-                          ),
-                        ],
                       ],
                     ),
                   )
@@ -171,14 +218,38 @@ class _TaskComposerState extends State<TaskComposer> {
         child: Row(
           children: [
             const SizedBox(width: 16),
-            AnimatedRotation(
-              turns: focused ? .25 : 0,
-              duration: duration,
-              curve: MotionTokens.easeOut,
-              child: DayIcon(
-                DayGlyph.add,
-                size: 22,
-                color: focused ? c.text : c.muted,
+            Builder(
+              builder: (box) => Semantics(
+                button: true,
+                label: event ? 'Событие' : 'Задача',
+                child: GestureDetector(
+                  key: const Key('composer-kind'),
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => _chooseKind(box),
+                  child: SizedBox(
+                    height: 48,
+                    child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: Center(
+                          child: event
+                              ? const EventDot()
+                              : _TaskMark(focused ? c.text : c.muted),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      DayIcon(
+                        DayGlyph.down,
+                        size: 16,
+                        color: focused ? c.text : c.muted,
+                      ),
+                    ],
+                  ),
+                  ),
+                ),
               ),
             ),
             Expanded(
@@ -247,45 +318,61 @@ class _TaskComposerState extends State<TaskComposer> {
   }
 }
 
-/// A small pill of the switch above the field; [dot] draws the event's dot.
-class _KindChip extends StatelessWidget {
+/// The ring a task has instead of an event's dot.
+class _TaskMark extends StatelessWidget {
+  final Color color;
+  const _TaskMark(this.color);
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 20,
+    height: 20,
+    decoration: BoxDecoration(
+      shape: BoxShape.circle,
+      border: Border.all(color: color, width: 2),
+    ),
+  );
+}
+
+/// A small pill above the field (the event's day, its time); [onClear]
+/// draws a cross that takes the value away.
+class _Chip extends StatelessWidget {
   final String label;
-  final bool selected, dot;
   final VoidCallback onTap;
-  const _KindChip({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-    this.dot = false,
-  });
+  final VoidCallback? onClear;
+  const _Chip({required this.label, required this.onTap, this.onClear});
   @override
   Widget build(BuildContext context) {
     final c = DayColors.of(context);
-    final fg = selected ? c.screen : c.muted;
     return FluidSurface(
       pressScale: .94,
       child: GestureDetector(
         onTap: onTap,
-        child: AnimatedContainer(
-          duration: MotionTokens.duration(context, MotionTokens.fast),
+        child: Container(
           height: 31,
           padding: const EdgeInsets.symmetric(horizontal: 14),
           decoration: BoxDecoration(
-            color: selected ? c.text : c.input,
+            color: c.input,
             borderRadius: BorderRadius.circular(16),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (dot) ...[const EventDot(), const SizedBox(width: 6)],
               Text(
                 label,
                 style: Theme.of(context).textTheme.bodySmall!.copyWith(
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
-                  color: fg,
+                  color: c.muted,
                 ),
               ),
+              if (onClear != null) ...[
+                const SizedBox(width: 6),
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: onClear,
+                  child: DayIcon(DayGlyph.close, size: 14, color: c.muted),
+                ),
+              ],
             ],
           ),
         ),

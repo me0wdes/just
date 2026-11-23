@@ -108,7 +108,7 @@ void main() {
     await db.close();
   });
 
-  testWidgets('on a phone a swipe turns the day within the two weeks', (
+  testWidgets('on a phone a sideways swipe no longer turns the day', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(375, 812);
@@ -128,11 +128,8 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    // Monday: nothing before it in the header, so back stays put.
-    await swipe(200);
-    expect(c.day.toString(), '2026-10-19');
     await swipe(-200);
-    expect(c.day.toString(), '2026-10-20');
+    expect(c.day.toString(), '2026-10-19');
     await swipe(200);
     expect(c.day.toString(), '2026-10-19');
     expect(tester.takeException(), isNull);
@@ -246,6 +243,11 @@ void main() {
     expect(find.text('Изменить'), findsOneWidget);
     expect(find.text('Список'), findsOneWidget);
     expect(find.text('Удалить'), findsOneWidget);
+    // «Список» opens the sheet, which ends with a way to make a new one.
+    await tester.tap(find.text('Список'));
+    await tester.pumpAndSettle();
+    expect(find.text('Сменить список'), findsOneWidget);
+    expect(find.text('Новый список'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
     c.dispose();
     await db.close();

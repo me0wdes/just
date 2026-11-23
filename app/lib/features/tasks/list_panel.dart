@@ -13,6 +13,28 @@ import '../../theme/motion_tokens.dart';
 import 'task_controller.dart';
 import 'task_row.dart' show listColor;
 
+/// «Новый список» from outside the sidebar (the move sheet): asks for the
+/// name, icon and colour and returns the new list's id and name, or null
+/// when it was closed or left empty.
+Future<(String, String)?> createListDialog(
+  BuildContext context,
+  TaskController controller,
+) async {
+  DaySound.play(context, UiSound.open);
+  final result = await showDayPanel<(String, String, String)>(
+    context,
+    (_) => _ListDialog(fresh: controller.nextListColor),
+  );
+  final name = result?.$1.trim() ?? '';
+  if (result == null || name.isEmpty) return null;
+  final id = await controller.createList(
+    name,
+    icon: result.$2,
+    color: result.$3,
+  );
+  return (id, name);
+}
+
 /// Sidebar card: views, personal lists and settings. The selection pill
 /// slides between rows instead of jumping.
 class ListPanel extends StatelessWidget {
@@ -347,6 +369,7 @@ class _ListDialogState extends State<_ListDialog> {
   Widget build(BuildContext context) {
     final c = DayColors.of(context);
     final theme = Theme.of(context);
+    final phone = isPhone(context);
     return DayPanel(
       child: SizedBox(
         width: 400,
@@ -379,6 +402,7 @@ class _ListDialogState extends State<_ListDialog> {
               const SizedBox(height: 8),
               DayIconGrid(
                 selected: icon,
+                large: phone,
                 onPick: (key) => setState(() => icon = key),
               ),
               const SizedBox(height: 16),
@@ -387,17 +411,24 @@ class _ListDialogState extends State<_ListDialog> {
                 style: theme.textTheme.bodySmall!.copyWith(color: c.muted),
               ),
               const SizedBox(height: 8),
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: [
-                  for (final hex in listPalette)
-                    _ColorDot(
-                      hex: hex,
-                      selected: hex == color,
-                      onTap: () => setState(() => color = hex),
-                    ),
-                ],
+              // Phone: the icons' cells, six to a row, 10 apart.
+              LayoutBuilder(
+                builder: (context, box) {
+                  final size = phone ? (box.maxWidth - 50) / 6 - .01 : 30.0;
+                  return Wrap(
+                    spacing: phone ? 10 : 6,
+                    runSpacing: phone ? 10 : 6,
+                    children: [
+                      for (final hex in listPalette)
+                        _ColorDot(
+                          hex: hex,
+                          size: size,
+                          selected: hex == color,
+                          onTap: () => setState(() => color = hex),
+                        ),
+                    ],
+                  );
+                },
               ),
               const SizedBox(height: 20),
               Row(
@@ -426,11 +457,13 @@ class _ListDialogState extends State<_ListDialog> {
 class _ColorDot extends StatelessWidget {
   final String hex;
   final bool selected;
+  final double size;
   final VoidCallback onTap;
   const _ColorDot({
     required this.hex,
     required this.selected,
     required this.onTap,
+    this.size = 30,
   });
   @override
   Widget build(BuildContext context) {
@@ -446,8 +479,8 @@ class _ColorDot extends StatelessWidget {
           onTap: onTap,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 120),
-            width: 30,
-            height: 30,
+            width: size,
+            height: size,
             alignment: Alignment.center,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
@@ -457,8 +490,8 @@ class _ColorDot extends StatelessWidget {
               ),
             ),
             child: Container(
-              width: 22,
-              height: 22,
+              width: size * .72,
+              height: size * .72,
               decoration: BoxDecoration(color: color, shape: BoxShape.circle),
             ),
           ),

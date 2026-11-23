@@ -297,4 +297,40 @@ void main() {
     c.dispose();
     await db.close();
   });
+
+  testWidgets('the add field picks an event; it starts dated, time is optional', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final db = AppDatabase.memory(workspaceId: 'local');
+    final repo = SqliteTaskRepository(db);
+    final c = TaskController(
+      repo,
+      feedback: const SilentCompletionFeedback(),
+      today: () => LocalDate.parse('2026-10-19'),
+    );
+    await tester.pumpWidget(MaterialApp(home: TaskHome(controller: c)));
+    await tester.pumpAndSettle();
+    expect(find.text('+ Время'), findsNothing);
+    await tester.tap(find.byKey(const Key('composer-kind')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Событие'));
+    await tester.pumpAndSettle();
+    // The day is there from the start, the time waits for its button.
+    expect(find.text('Сегодня'), findsWidgets);
+    expect(find.text('+ Время'), findsOneWidget);
+    await tester.enterText(find.byKey(const Key('task-title-input')), 'Дождь');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    final added = c.tasks.firstWhere((t) => t.title == 'Дождь');
+    expect(added.isEvent, true);
+    expect(added.dueTime, isNull);
+    expect(added.dueDate.toString(), '2026-10-19');
+    await tester.pumpWidget(const SizedBox());
+    c.dispose();
+    await db.close();
+  });
 }

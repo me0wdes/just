@@ -199,7 +199,7 @@ class _TaskHomeState extends State<TaskHome> {
   Future<void> moveSheet(TaskItem task) async {
     final current = task.listIds.firstOrNull ?? inboxId;
     DaySound.play(context, UiSound.open);
-    final picked = await showDaySheet<TaskList>(
+    final picked = await showDaySheet<Object>(
       context,
       builder: (sheet) {
         final colors = DayColors.of(sheet);
@@ -229,7 +229,7 @@ class _TaskHomeState extends State<TaskHome> {
                   ),
                   child: Row(
                     children: [
-                      DayIcon(listGlyph(list.icon), size: 20, color: colors.text),
+                      DayIcon(listGlyph(list.icon), size: 20, color: listColor(list)),
                       const SizedBox(width: 14),
                       Expanded(
                         child: Text(
@@ -243,11 +243,41 @@ class _TaskHomeState extends State<TaskHome> {
                   ),
                 ),
               ),
+            // Figma «Сменить список»: a new list right from here.
+            InkWell(
+              borderRadius: BorderRadius.circular(14),
+              onTap: () => Navigator.pop(sheet, 'new'),
+              child: Container(
+                height: 56,
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                child: Row(
+                  children: [
+                    DayIcon(DayGlyph.add, size: 20, color: colors.muted),
+                    const SizedBox(width: 14),
+                    Text(
+                      'Новый список',
+                      style: Theme.of(sheet).textTheme.bodyLarge,
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ],
         );
       },
     );
-    if (picked == null || picked.id == current || !mounted) return;
+    if (picked == null || !mounted) return;
+    if (picked == 'new') {
+      final made = await createListDialog(context, c);
+      if (made == null || !mounted) return;
+      await c.patchTask(task.id, {
+        'listIds': [made.$1],
+      });
+      if (!mounted) return;
+      DayToast.show(context, 'Перенесено: ${made.$2}');
+      return;
+    }
+    if (picked is! TaskList || picked.id == current || !mounted) return;
     await c.patchTask(task.id, {
       'listIds': picked.id == inboxId ? <String>[] : [picked.id],
     });
@@ -530,7 +560,9 @@ class _TaskHomeState extends State<TaskHome> {
           return KeyedSubtree(
             key: ValueKey('group-${group?.id ?? 'overdue'}'),
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+              // Figma: 20 between a group and the next label (the card's
+              // own 8 and 12 more), 8 under it.
+              padding: EdgeInsets.fromLTRB(14, index == 0 ? 0 : 12, 14, 8),
               child: _GroupLabel(
                 group ?? const _Group('over', 'Просроченные'),
               ),
@@ -733,8 +765,9 @@ class _TaskHomeState extends State<TaskHome> {
                             child: Align(
                               alignment: Alignment.centerLeft,
                               child: ConstrainedBox(
+                                // 420 of filters and their 10 each side.
                                 constraints: const BoxConstraints(
-                                  maxWidth: 420,
+                                  maxWidth: 440,
                                 ),
                                 child: filters(),
                               ),
@@ -751,16 +784,10 @@ class _TaskHomeState extends State<TaskHome> {
             ],
           ),
           Expanded(
-            child: GestureDetector(
-              // Phone «Сегодня»: a swipe turns the day, the way the week
-              // above would with a tap.
-              onHorizontalDragEnd: !desktop && c.query.view == TaskView.today
-                  ? swipeDay
-                  : null,
-              // Cards fade out above the field and under the filters instead
-              // of being cut off; the top edge only once the list has been
-              // scrolled, so the first card at rest stays whole.
-              child: AnimatedBuilder(
+            // Cards fade out above the field and under the filters instead
+            // of being cut off; the top edge only once the list has been
+            // scrolled, so the first card at rest stays whole.
+            child: AnimatedBuilder(
                 animation: scroll,
                 builder: (context, child) => ShaderMask(
                   blendMode: BlendMode.dstIn,
@@ -791,9 +818,7 @@ class _TaskHomeState extends State<TaskHome> {
                     opacity: animation,
                     child: SlideTransition(
                       position: Tween(
-                        begin: c.day == swipedTo
-                            ? Offset(swiped * .06, 0)
-                            : const Offset(0, .02),
+                        begin: const Offset(0, .02),
                         end: Offset.zero,
                       ).animate(animation),
                       child: child,
@@ -807,15 +832,15 @@ class _TaskHomeState extends State<TaskHome> {
                   ),
                 ),
               ),
-            ),
           ),
           // No gap: the fade already ends at the field, a second strip of
           // empty space under it only looks like a hole.
           TaskComposer(
             focusNode: composer,
-            onAdd: (text, time) async {
+            day: c.day,
+            onAdd: (text, event) async {
               setState(() => showCompleted = false);
-              if (time == null) {
+              if (event == null) {
                 await c.addTask(text);
                 return;
               }
@@ -825,7 +850,7 @@ class _TaskHomeState extends State<TaskHome> {
                   await widget.onRequestReminder!()) {
                 zone = (await FlutterTimezone.getLocalTimezone()).identifier;
               }
-              await c.addEvent(text, time, zone: zone);
+              await c.addEvent(text, day: event.day, time: event.time, zone: zone);
             },
           ),
         ],
@@ -850,33 +875,14 @@ class _TaskHomeState extends State<TaskHome> {
   /// How tall the fade over the last cards is.
   static const _fade = 32.0;
 
-  /// The day a swipe landed on and which way it went (1 forward, -1
-  /// back): that day slides in from the side, a tapped one rises.
-  LocalDate? swipedTo;
-  int swiped = 0;
-
-  /// Stays within the two weeks the header shows.
-  void swipeDay(DragEndDetails details) {
-    final v = details.primaryVelocity ?? 0;
-    if (v.abs() < 300) return;
-    final step = v < 0 ? 1 : -1, today = c.today();
-    final next = LocalDate.parse(
-      c.day.utc.add(Duration(days: step)).toIso8601String().substring(0, 10),
-    );
-    final fromMonday =
-        next.utc.difference(today.utc).inDays + today.utc.weekday - 1;
-    if (fromMonday < 0 || fromMonday >= 14) return;
-    DaySound.play(context, UiSound.nav);
-    HapticFeedback.selectionClick();
-    swiped = step;
-    swipedTo = next;
-    c.selectDay(next);
-  }
-
-  Widget filters() => DaySegments(
-    index: showCompleted ? 1 : 0,
-    labels: const ['Активные', 'Выполненные'],
-    onChanged: (i) => setState(() => showCompleted = i == 1),
+  /// Figma «Фильтры»: 10 in from the content's edge on both sides.
+  Widget filters() => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 10),
+    child: DaySegments(
+      index: showCompleted ? 1 : 0,
+      labels: const ['Активные', 'Выполненные'],
+      onChanged: (i) => setState(() => showCompleted = i == 1),
+    ),
   );
 
   /// The quiet states are not shown; only offline, sign-in and conflict

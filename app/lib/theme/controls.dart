@@ -721,11 +721,15 @@ class DayMenuItem {
   final DayGlyph icon;
   final VoidCallback onTap;
   final bool destructive;
+
+  /// Drawn instead of [icon] when the row has its own mark (a dot, a ring).
+  final Widget? leading;
   const DayMenuItem(
     this.label,
     this.icon,
     this.onTap, {
     this.destructive = false,
+    this.leading,
   });
 }
 
@@ -1034,13 +1038,19 @@ class _MenuPanelState extends State<_MenuPanel> {
                             ),
                             child: Row(
                               children: [
-                                DayIcon(
-                                  widget.items[i].icon,
-                                  size: touch ? 20 : 16,
-                                  color: widget.items[i].destructive
-                                      ? c.overdue
-                                      : c.muted,
-                                ),
+                                if (widget.items[i].leading != null)
+                                  SizedBox(
+                                    width: touch ? 20 : 16,
+                                    child: Center(child: widget.items[i].leading),
+                                  )
+                                else
+                                  DayIcon(
+                                    widget.items[i].icon,
+                                    size: touch ? 20 : 16,
+                                    color: widget.items[i].destructive
+                                        ? c.overdue
+                                        : c.muted,
+                                  ),
                                 SizedBox(width: touch ? 12 : 10),
                                 Expanded(
                                   child: Text(
@@ -1081,7 +1091,16 @@ class _MenuPanelState extends State<_MenuPanel> {
 class DayIconGrid extends StatelessWidget {
   final String selected;
   final ValueChanged<String> onPick;
-  const DayIconGrid({super.key, required this.selected, required this.onPick});
+
+  /// Figma «Шторка · Новый список»: on a phone six big cells to a row with
+  /// 10 between them, so a finger lands on one.
+  final bool large;
+  const DayIconGrid({
+    super.key,
+    required this.selected,
+    required this.onPick,
+    this.large = false,
+  });
   @override
   // As many 36 px cells per row as fit (Figma «Новый список»: nine), the
   // spare width shared between them; a popup with no width of its own
@@ -1090,6 +1109,29 @@ class DayIconGrid extends StatelessWidget {
     builder: (context, box) {
       const compact = 6 * controlHeight + 5 * 4;
       final width = box.hasBoundedWidth ? box.maxWidth : compact;
+      if (large) {
+        // A hair under the exact share, so rounding never wraps a cell.
+        final cell = (width - 50) / 6 - .01;
+        return SizedBox(
+          width: width,
+          child: Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              for (final key in listIconKeys)
+                _IconCell(
+                  key: ValueKey('list-icon-$key'),
+                  glyph: listGlyph(key),
+                  selected: key == selected,
+                  onTap: () => onPick(key),
+                  size: cell,
+                  iconSize: 22,
+                  radius: 12,
+                ),
+            ],
+          ),
+        );
+      }
       final perRow = math.max(1, ((width + 4) / (controlHeight + 4)).floor());
       final gap = perRow == 1
           ? 0.0
@@ -1119,11 +1161,15 @@ class _IconCell extends StatefulWidget {
   final DayGlyph glyph;
   final bool selected;
   final VoidCallback onTap;
+  final double size, iconSize, radius;
   const _IconCell({
     super.key,
     required this.glyph,
     required this.selected,
     required this.onTap,
+    this.size = controlHeight,
+    this.iconSize = 20,
+    this.radius = 8,
   });
   @override
   State<_IconCell> createState() => _IconCellState();
@@ -1149,20 +1195,20 @@ class _IconCellState extends State<_IconCell> {
             onTap: widget.onTap,
             child: AnimatedContainer(
               duration: MotionTokens.duration(context, MotionTokens.fast),
-              width: controlHeight,
-              height: controlHeight,
+              width: widget.size,
+              height: widget.size,
               decoration: BoxDecoration(
                 color: widget.selected
                     ? overlay(context, .07, .10)
                     : hovered
                     ? overlay(context, .05, .07)
                     : Colors.transparent,
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(widget.radius),
               ),
               child: Center(
                 child: DayIcon(
                   widget.glyph,
-                  size: 20,
+                  size: widget.iconSize,
                   color: widget.selected || hovered ? c.text : c.muted,
                 ),
               ),

@@ -30,11 +30,30 @@ const _months = [
 Future<DateTime?> showDayDatePicker(
   BuildContext context, {
   required DateTime initial,
-}) => showDayPanel<DateTime>(context, (_) => _DatePicker(initial));
+}) async => (await showDayPanel<DayDue>(
+  context,
+  (_) => _DatePicker(initial),
+))?.day;
+
+/// A day and, only if the user asked for one, a time.
+typedef DayDue = ({DateTime day, TimeOfDay? time});
+
+/// The date dialog with a «+ Время» button under the month: the day is all
+/// that is needed, the time is added on purpose and can be taken away.
+Future<DayDue?> showDayDue(
+  BuildContext context, {
+  required DateTime initial,
+  TimeOfDay? time,
+}) => showDayPanel<DayDue>(
+  context,
+  (_) => _DatePicker(initial, withTime: true, time: time),
+);
 
 class _DatePicker extends StatefulWidget {
   final DateTime initial;
-  const _DatePicker(this.initial);
+  final bool withTime;
+  final TimeOfDay? time;
+  const _DatePicker(this.initial, {this.withTime = false, this.time});
   @override
   State<_DatePicker> createState() => _DatePickerState();
 }
@@ -42,6 +61,16 @@ class _DatePicker extends StatefulWidget {
 class _DatePickerState extends State<_DatePicker> {
   late DateTime selected = DateUtils.dateOnly(widget.initial);
   late DateTime month = DateTime(selected.year, selected.month);
+  late TimeOfDay? time = widget.time;
+
+  Future<void> pickTime() async {
+    final picked = await showDayTimePicker(
+      context,
+      initial: time ?? const TimeOfDay(hour: 9, minute: 0),
+      title: 'Время срока',
+    );
+    if (picked != null && mounted) setState(() => time = picked);
+  }
 
   void shift(int by) => setState(() {
     month = DateTime(month.year, month.month + by);
@@ -146,6 +175,10 @@ class _DatePickerState extends State<_DatePicker> {
                       }(),
                   ],
                 ),
+              if (widget.withTime) ...[
+                const SizedBox(height: 16),
+                _TimeChip(time: time, onTap: pickTime, onClear: () => setState(() => time = null)),
+              ],
               const SizedBox(height: 16),
               SizedBox(
                 width: 7 * cell,
@@ -156,11 +189,68 @@ class _DatePickerState extends State<_DatePicker> {
                     label: const Text('Отмена'),
                   ),
                   done: DayButton(
-                    onPressed: () => Navigator.pop(context, selected),
+                    onPressed: () =>
+                        Navigator.pop(context, (day: selected, time: time)),
                     label: const Text('Готово'),
                   ),
                 ),
               ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Figma «Добавить время»: a pill that reads «+ Время» until there is one,
+/// then the time with a cross that takes it away.
+class _TimeChip extends StatelessWidget {
+  final TimeOfDay? time;
+  final VoidCallback onTap, onClear;
+  const _TimeChip({
+    required this.time,
+    required this.onTap,
+    required this.onClear,
+  });
+  @override
+  Widget build(BuildContext context) {
+    final c = DayColors.of(context);
+    final t = time;
+    final label = t == null
+        ? '+ Время'
+        : '${t.hour.toString().padLeft(2, '0')}:'
+              '${t.minute.toString().padLeft(2, '0')}';
+    return FluidSurface(
+      pressScale: .94,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          height: 31,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          decoration: BoxDecoration(
+            color: c.input,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                label,
+                style: Theme.of(context).textTheme.bodySmall!.copyWith(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: t == null ? c.muted : c.text,
+                ),
+              ),
+              if (t != null) ...[
+                const SizedBox(width: 6),
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: onClear,
+                  child: DayIcon(DayGlyph.close, size: 14, color: c.muted),
+                ),
+              ],
             ],
           ),
         ),
@@ -225,22 +315,17 @@ class _DayCell extends StatelessWidget {
 }
 
 /// Figma «Выбор времени»: hour and minute boxes over a 24-hour dial (outer
-/// ring 00–11, inner 12–23; minutes by five). [cancelText] on the left
-/// returns null, which the due date reads as «only the date».
+/// ring 00–11, inner 12–23; minutes by five). «Отмена» returns null.
 Future<TimeOfDay?> showDayTimePicker(
   BuildContext context, {
   required TimeOfDay initial,
   String title = 'Время',
-  String cancelText = 'Отмена',
-}) => showDayPanel<TimeOfDay>(
-  context,
-  (_) => _TimePicker(initial, title, cancelText),
-);
+}) => showDayPanel<TimeOfDay>(context, (_) => _TimePicker(initial, title));
 
 class _TimePicker extends StatefulWidget {
   final TimeOfDay initial;
-  final String title, cancelText;
-  const _TimePicker(this.initial, this.title, this.cancelText);
+  final String title;
+  const _TimePicker(this.initial, this.title);
   @override
   State<_TimePicker> createState() => _TimePickerState();
 }
@@ -331,7 +416,7 @@ class _TimePickerState extends State<_TimePicker> {
                 cancel: DayButton(
                   kind: DayButtonKind.ghost,
                   onPressed: () => Navigator.pop(context),
-                  label: Text(widget.cancelText),
+                  label: const Text('Отмена'),
                 ),
                 done: DayButton(
                   onPressed: () => Navigator.pop(

@@ -212,17 +212,23 @@ class TaskController extends ChangeNotifier {
       },
     ),
   );
-  /// An event: a reminder at [time] («HH:MM») on the shown day. With a
-  /// [zone] it also schedules the notification for that moment.
-  Future<CommandReceipt> addEvent(String title, String time, {String? zone}) {
-    final day = this.day.utc;
-    final at = DateTime(
-      day.year,
-      day.month,
-      day.day,
-      int.parse(time.substring(0, 2)),
-      int.parse(time.substring(3)),
-    );
+  /// An event on [day], with a [time] («HH:MM») when it has one. With a
+  /// time and a [zone] it also schedules the notification for that moment.
+  Future<CommandReceipt> addEvent(
+    String title, {
+    required LocalDate day,
+    String? time,
+    String? zone,
+  }) {
+    final at = time == null
+        ? null
+        : DateTime(
+            day.utc.year,
+            day.utc.month,
+            day.utc.day,
+            int.parse(time.substring(0, 2)),
+            int.parse(time.substring(3)),
+          );
     return repository.execute(
       TaskCommand.createTask(
         id: const Uuid().v4(),
@@ -236,9 +242,9 @@ class TaskController extends ChangeNotifier {
               ? 1024
               : tasks.map((t) => t.position).reduce((a, b) => a > b ? a : b) +
                     1024,
-          'dueDate': this.day.toString(),
-          'dueTime': time,
-          if (zone != null && at.isAfter(clock())) ...{
+          'dueDate': day.toString(),
+          'dueTime': ?time,
+          if (zone != null && at != null && at.isAfter(clock())) ...{
             'reminderAtUtc': at.toUtc().toIso8601String(),
             'reminderTimezone': zone,
           },
@@ -302,10 +308,15 @@ class TaskController extends ChangeNotifier {
       listPalette[1 + lists.where((l) => l.id != inboxId).length % 7];
 
   /// Creates a list and returns its id, for the combobox «Создать».
-  Future<String> createList(String name) async {
+  Future<String> createList(String name, {String? icon, String? color}) async {
     final id = const Uuid().v4();
     await repository.execute(
-      TaskCommand.createList(id, name, color: nextListColor),
+      TaskCommand.createList(
+        id,
+        name,
+        icon: icon,
+        color: color ?? nextListColor,
+      ),
     );
     return id;
   }

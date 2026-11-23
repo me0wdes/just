@@ -237,21 +237,20 @@ class _TaskDetailPanelState extends State<TaskDetailPanel> {
     return _before.containsKey(minutes) ? minutes : null;
   }
 
-  /// A date, then an optional time: «Только дата» keeps the whole day.
+  /// A date; the time is a button inside the dialog, never asked for.
   Future<void> pickDue() async {
-    final day = await date();
-    if (day == null || !mounted) return;
-    final time = await showDayTimePicker(
+    final result = await showDayDue(
       context,
-      initial: dueTime == null
-          ? const TimeOfDay(hour: 9, minute: 0)
+      initial: DateTime.tryParse(due ?? '') ?? DateTime.now(),
+      time: dueTime == null
+          ? null
           : TimeOfDay(
               hour: int.parse(dueTime!.substring(0, 2)),
               minute: int.parse(dueTime!.substring(3)),
             ),
-      title: 'Время срока',
-      cancelText: 'Только дата',
     );
+    if (result == null) return;
+    final day = result.day, time = result.time;
     if (!mounted) return;
     final preset = reminderPreset();
     change(() {
