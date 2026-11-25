@@ -114,6 +114,8 @@ class _FluidSurfaceState extends State<FluidSurface>
         }
       },
       onPointerUp: (event) {
+        // A dragged card can be rebuilt elsewhere before the finger lifts.
+        if (!mounted) return;
         final size = context.size;
         if (pressed &&
             widget.enabled &&
@@ -126,6 +128,7 @@ class _FluidSurfaceState extends State<FluidSurface>
         target(press, 0);
       },
       onPointerCancel: (_) {
+        if (!mounted) return;
         pressed = false;
         target(press, 0);
       },

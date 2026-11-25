@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 
@@ -229,7 +230,11 @@ class _TaskHomeState extends State<TaskHome> {
                   ),
                   child: Row(
                     children: [
-                      DayIcon(listGlyph(list.icon), size: 20, color: listColor(list)),
+                      DayIcon(
+                        listGlyph(list.icon),
+                        size: 20,
+                        color: listColor(list),
+                      ),
                       const SizedBox(width: 14),
                       Expanded(
                         child: Text(
@@ -432,12 +437,7 @@ class _TaskHomeState extends State<TaskHome> {
           last = key;
           entries.add(
             key == 'over'
-                ? _Group(
-                    key,
-                    'Просроченные',
-                    count: sorted.where(leftOver).length,
-                    red: true,
-                  )
+                ? _Group(key, 'Просроченные', red: true)
                 : t.dueDate == null
                 ? _Group(key, 'Позже')
                 : _Group(
@@ -478,190 +478,218 @@ class _TaskHomeState extends State<TaskHome> {
         child: emptyState(showCompleted),
       );
     }
-    return ReorderableListView.builder(
-      scrollController: scroll,
-      buildDefaultDragHandles: false,
-      // The last card can scroll clear of the fade. The 16px under the
-      // filters is padding too, so the top fade starts at the filters
-      // instead of leaving a gap above it.
-      padding: const EdgeInsets.only(top: 16, bottom: _fade),
-      itemCount: entries.length,
-      // The dragged card lifts with a soft shadow cut to its own shape;
-      // the item's 8px bottom gap stays outside the shadow. Touch picks up
-      // where the press left it (sunk to .97) and grows to the touch menu's
-      // 1.03, around the card's own centre, so nothing jumps.
-      proxyDecorator: (child, index, animation) => AnimatedBuilder(
-        animation: animation,
-        child: child,
-        builder: (context, child) {
-          final t = Curves.easeOut.transform(animation.value);
-          final from = desktopLayout ? 1.0 : .97,
-              to = desktopLayout ? 1.015 : liftScale;
-          return Material(
-            type: MaterialType.transparency,
-            child: LayoutBuilder(
-              builder: (context, box) => Transform.scale(
-                scale: from + (to - from) * t,
-                alignment: Alignment(0, -8 / box.maxHeight),
-                child: Stack(
-                  children: [
-                    Positioned(
-                      left: 0,
-                      right: 0,
-                      top: 0,
-                      bottom: 8,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          // A flat row needs a body to lift.
-                          color: DayColors.of(context).card,
-                          border: Border.all(
-                            color: DayColors.of(context).border,
-                          ),
-                          borderRadius: BorderRadius.circular(14),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: .18 * t),
-                              blurRadius: 24,
-                              offset: Offset(0, 8 * t),
+    // The dragged card lifts with a soft shadow cut to its own shape;
+    // the item's 8px bottom gap stays outside the shadow. Touch picks up
+    // where the press left it (sunk to .97) and grows to the touch menu's
+    // 1.03, around the card's own centre, so nothing jumps.
+    Widget proxy(Widget child, int index, Animation<double> animation) =>
+        AnimatedBuilder(
+          animation: animation,
+          child: child,
+          builder: (context, child) {
+            final t = Curves.easeOut.transform(animation.value);
+            final from = desktopLayout ? 1.0 : .97,
+                to = desktopLayout ? 1.015 : liftScale;
+            return Material(
+              type: MaterialType.transparency,
+              child: LayoutBuilder(
+                builder: (context, box) => Transform.scale(
+                  scale: from + (to - from) * t,
+                  alignment: Alignment(0, -8 / box.maxHeight),
+                  child: Stack(
+                    children: [
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        top: 0,
+                        bottom: 8,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            // A flat row needs a body to lift.
+                            color: DayColors.of(context).card,
+                            border: Border.all(
+                              color: DayColors.of(context).border,
                             ),
-                          ],
+                            borderRadius: BorderRadius.circular(14),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: .18 * t),
+                                blurRadius: 24,
+                                offset: Offset(0, 8 * t),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                    child!,
-                  ],
+                      child!,
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+
+    Widget card(TaskItem task, int index) {
+      final fresh = known.add(task.id);
+      // The card on screen, so a touch menu can lift it over the dimming.
+      BuildContext? card;
+      late final TaskRow row;
+      row = TaskRow(
+        task: task,
+        selected: c.selectedId == task.id,
+        today: c.query.today,
+        list: pillList(task),
+        beam: lit.contains(task.id)
+            ? BeamStyle(palette, lit.indexOf(task.id))
+            : null,
+        onToggle: () => toggle(task),
+        onOpen: () => open(task, inline),
+        onMenu: (at) => showDayMenu(
+          context,
+          at,
+          anchor: desktop ? null : _rectOf(card),
+          preview: row,
+          [
+            DayMenuItem('Открыть', DayGlyph.note, () => open(task, inline)),
+            DayMenuItem(
+              task.completed ? 'Вернуть' : 'Выполнить',
+              DayGlyph.check,
+              () => toggle(task),
+            ),
+            DayMenuItem(
+              'Сменить список',
+              DayGlyph.list,
+              () => moveMenu(task, at, desktop ? null : _rectOf(card), row),
+            ),
+            DayMenuItem(
+              'Удалить',
+              DayGlyph.delete,
+              () => remove(task),
+              destructive: true,
+            ),
+          ],
+        ),
+      );
+      final held = Builder(
+        builder: (context) {
+          // The drag proxy builds this too; the list's own card wins.
+          if (card?.mounted != true) card = context;
+          return row;
+        },
+      );
+      return KeyedSubtree(
+        key: ValueKey(task.id),
+        child: reflow(
+          collapsing.contains(task.id) && task.completed
+              ? const SizedBox(height: 0, width: double.infinity)
+              : Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: _Appear(
+                    animate: fresh,
+                    // Desktop drags the card itself once the pointer moves
+                    // vertically; a plain click still opens it. Touch
+                    // waits for a long press so scrolling stays free.
+                    child: desktop
+                        ? _CardDrag(
+                            index: index,
+                            enabled: !task.completed,
+                            child: held,
+                          )
+                        : SwipeRow(
+                            onEdit: () => open(task, inline),
+                            onMove: () => moveSheet(task),
+                            onDelete: () => remove(task),
+                            child: Listener(
+                              onPointerDown: (e) {
+                                pressAt = e.position;
+                                pressMoved = 0;
+                              },
+                              onPointerMove: (e) {
+                                final start = pressAt;
+                                if (start == null) return;
+                                final d = (e.position - start).distance;
+                                if (d > pressMoved) pressMoved = d;
+                              },
+                              child: ReorderableDelayedDragStartListener(
+                                index: index,
+                                enabled: !task.completed,
+                                child: held,
+                              ),
+                            ),
+                          ),
+                  ),
+                ),
+        ),
+      );
+    }
+
+    // Every section is a list of its own and holds its dragged card: a task
+    // moves among its day's tasks, never into «Просроченные» or another
+    // day, where its date would send it straight back.
+    final sections = <({Object? label, List<TaskItem> tasks})>[];
+    for (final e in entries) {
+      if (e is TaskItem) {
+        if (sections.isEmpty) sections.add((label: null, tasks: <TaskItem>[]));
+        sections.last.tasks.add(e);
+      } else {
+        sections.add((label: e, tasks: <TaskItem>[]));
+      }
+    }
+    return CustomScrollView(
+      controller: scroll,
+      slivers: [
+        // The 16px under the filters is scrolled too, so the top fade
+        // starts at the filters instead of leaving a gap above it.
+        const SliverToBoxAdapter(child: SizedBox(height: 16)),
+        for (final (i, section) in sections.indexed) ...[
+          if (section.label case final label?)
+            SliverToBoxAdapter(
+              key: ValueKey('group-${label is _Group ? label.id : 'overdue'}'),
+              child: Padding(
+                // Figma: 20 between a group and the next label (the card's
+                // own 8 and 12 more), 8 under it.
+                padding: EdgeInsets.fromLTRB(14, i == 0 ? 0 : 12, 14, 8),
+                child: _GroupLabel(
+                  label is _Group
+                      ? label
+                      : const _Group('over', 'Просроченные'),
                 ),
               ),
             ),
-          );
-        },
-      ),
-      onReorderStart: (_) => DaySound.play(context, UiSound.tap),
-      // Touch: a long press only drags; editing is a swipe to the left.
-      onReorderEnd: (_) => pressAt = null,
-      onReorderItem: (oldIndex, newIndex) {
-        if (!desktopLayout && pressMoved < 12) return;
-        if (showCompleted || entries[oldIndex] is! TaskItem) return;
-        DaySound.play(context, UiSound.nav);
-        final copy = List<Object>.of(entries);
-        final item = copy.removeAt(oldIndex) as TaskItem;
-        final target = newIndex.clamp(0, copy.length);
-        // The neighbours that are tasks, the label does not count.
-        final prev = copy.sublist(0, target).whereType<TaskItem>().lastOrNull;
-        final next = copy.sublist(target).whereType<TaskItem>().firstOrNull;
-        final before = prev?.position ?? (next?.position ?? 1024) - 2048;
-        final after = next?.position ?? before + 2048;
-        c.reorderTask(item.id, (before + after) / 2);
-      },
-      itemBuilder: (context, index) {
-        final entry = entries[index];
-        if (entry is! TaskItem) {
-          final group = entry is _Group ? entry : null;
-          return KeyedSubtree(
-            key: ValueKey('group-${group?.id ?? 'overdue'}'),
-            child: Padding(
-              // Figma: 20 between a group and the next label (the card's
-              // own 8 and 12 more), 8 under it.
-              padding: EdgeInsets.fromLTRB(14, index == 0 ? 0 : 12, 14, 8),
-              child: _GroupLabel(
-                group ?? const _Group('over', 'Просроченные'),
-              ),
+          SliverReorderableList(
+            key: ValueKey(
+              'tasks-${section.label is _Group
+                  ? (section.label as _Group).id
+                  : section.label == null
+                  ? 'day'
+                  : 'overdue'}',
             ),
-          );
-        }
-        final task = entry;
-        final fresh = known.add(task.id);
-        // The card on screen, so a touch menu can lift it over the dimming.
-        BuildContext? card;
-        late final TaskRow row;
-        row = TaskRow(
-          task: task,
-          selected: c.selectedId == task.id,
-          today: c.query.today,
-          list: pillList(task),
-          beam: lit.contains(task.id)
-              ? BeamStyle(palette, lit.indexOf(task.id))
-              : null,
-          onToggle: () => toggle(task),
-          onOpen: () => open(task, inline),
-          onMenu: (at) => showDayMenu(
-            context,
-            at,
-            anchor: desktop ? null : _rectOf(card),
-            preview: row,
-            [
-              DayMenuItem('Открыть', DayGlyph.note, () => open(task, inline)),
-              DayMenuItem(
-                task.completed ? 'Вернуть' : 'Выполнить',
-                DayGlyph.check,
-                () => toggle(task),
-              ),
-              DayMenuItem(
-                'Сменить список',
-                DayGlyph.list,
-                () => moveMenu(task, at, desktop ? null : _rectOf(card), row),
-              ),
-              DayMenuItem(
-                'Удалить',
-                DayGlyph.delete,
-                () => remove(task),
-                destructive: true,
-              ),
-            ],
+            itemCount: section.tasks.length,
+            proxyDecorator: proxy,
+            dragBoundaryProvider: _SectionBounds.new,
+            onReorderStart: (_) => DaySound.play(context, UiSound.tap),
+            // Touch: a long press only drags; editing is a swipe to the left.
+            onReorderEnd: (_) => pressAt = null,
+            onReorderItem: (oldIndex, newIndex) {
+              if (!desktopLayout && pressMoved < 12) return;
+              if (showCompleted) return;
+              DaySound.play(context, UiSound.nav);
+              final copy = List<TaskItem>.of(section.tasks);
+              final item = copy.removeAt(oldIndex);
+              final target = newIndex.clamp(0, copy.length);
+              final prev = target > 0 ? copy[target - 1] : null;
+              final next = target < copy.length ? copy[target] : null;
+              final before = prev?.position ?? (next?.position ?? 1024) - 2048;
+              final after = next?.position ?? before + 2048;
+              c.reorderTask(item.id, (before + after) / 2);
+            },
+            itemBuilder: (context, index) => card(section.tasks[index], index),
           ),
-        );
-        final held = Builder(
-          builder: (context) {
-            // The drag proxy builds this too; the list's own card wins.
-            if (card?.mounted != true) card = context;
-            return row;
-          },
-        );
-        return KeyedSubtree(
-          key: ValueKey(task.id),
-          child: reflow(
-            collapsing.contains(task.id) && task.completed
-                ? const SizedBox(height: 0, width: double.infinity)
-                : Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: _Appear(
-                      animate: fresh,
-                      // Desktop drags the card itself once the pointer moves
-                      // vertically; a plain click still opens it. Touch
-                      // waits for a long press so scrolling stays free.
-                      child: desktop
-                          ? _CardDrag(
-                              index: index,
-                              enabled: !task.completed,
-                              child: held,
-                            )
-                          : SwipeRow(
-                              onEdit: () => open(task, inline),
-                              onMove: () => moveSheet(task),
-                              onDelete: () => remove(task),
-                              child: Listener(
-                                onPointerDown: (e) {
-                                  pressAt = e.position;
-                                  pressMoved = 0;
-                                },
-                                onPointerMove: (e) {
-                                  final start = pressAt;
-                                  if (start == null) return;
-                                  final d = (e.position - start).distance;
-                                  if (d > pressMoved) pressMoved = d;
-                                },
-                                child: ReorderableDelayedDragStartListener(
-                                  index: index,
-                                  enabled: !task.completed,
-                                  child: held,
-                                ),
-                              ),
-                            ),
-                    ),
-                  ),
-          ),
-        );
-      },
+        ],
+        // The last card can scroll clear of the fade.
+        const SliverToBoxAdapter(child: SizedBox(height: _fade)),
+      ],
     );
   }
 
@@ -788,50 +816,50 @@ class _TaskHomeState extends State<TaskHome> {
             // of being cut off; the top edge only once the list has been
             // scrolled, so the first card at rest stays whole.
             child: AnimatedBuilder(
-                animation: scroll,
-                builder: (context, child) => ShaderMask(
-                  blendMode: BlendMode.dstIn,
-                  shaderCallback: (rect) {
-                    final y = scroll.positions.isEmpty
-                        ? 0.0
-                        : scroll.positions.last.pixels;
-                    final top = (y / _fade).clamp(0.0, 1.0);
-                    final edge = math.min(_fade / rect.height, .5);
-                    return LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.black.withValues(alpha: 1 - top),
-                        Colors.black,
-                        Colors.black,
-                        Colors.transparent,
-                      ],
-                      stops: [0, edge, 1 - edge, 1],
-                    ).createShader(rect);
-                  },
-                  child: child,
+              animation: scroll,
+              builder: (context, child) => ShaderMask(
+                blendMode: BlendMode.dstIn,
+                shaderCallback: (rect) {
+                  final y = scroll.positions.isEmpty
+                      ? 0.0
+                      : scroll.positions.last.pixels;
+                  final top = (y / _fade).clamp(0.0, 1.0);
+                  final edge = math.min(_fade / rect.height, .5);
+                  return LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withValues(alpha: 1 - top),
+                      Colors.black,
+                      Colors.black,
+                      Colors.transparent,
+                    ],
+                    stops: [0, edge, 1 - edge, 1],
+                  ).createShader(rect);
+                },
+                child: child,
+              ),
+              child: AnimatedSwitcher(
+                duration: MotionTokens.duration(context, MotionTokens.reflow),
+                switchInCurve: MotionTokens.easeOut,
+                transitionBuilder: (child, animation) => FadeTransition(
+                  opacity: animation,
+                  child: SlideTransition(
+                    position: Tween(
+                      begin: const Offset(0, .02),
+                      end: Offset.zero,
+                    ).animate(animation),
+                    child: child,
+                  ),
                 ),
-                child: AnimatedSwitcher(
-                  duration: MotionTokens.duration(context, MotionTokens.reflow),
-                  switchInCurve: MotionTokens.easeOut,
-                  transitionBuilder: (child, animation) => FadeTransition(
-                    opacity: animation,
-                    child: SlideTransition(
-                      position: Tween(
-                        begin: const Offset(0, .02),
-                        end: Offset.zero,
-                      ).animate(animation),
-                      child: child,
-                    ),
+                child: KeyedSubtree(
+                  key: ValueKey(
+                    '${c.query.view}-${c.query.listId}-${c.query.day}-$showCompleted',
                   ),
-                  child: KeyedSubtree(
-                    key: ValueKey(
-                      '${c.query.view}-${c.query.listId}-${c.query.day}-$showCompleted',
-                    ),
-                    child: taskList(active, completed, desktop, inline),
-                  ),
+                  child: taskList(active, completed, desktop, inline),
                 ),
               ),
+            ),
           ),
           // No gap: the fade already ends at the field, a second strip of
           // empty space under it only looks like a hole.
@@ -844,13 +872,20 @@ class _TaskHomeState extends State<TaskHome> {
                 await c.addTask(text);
                 return;
               }
-              // An event also asks for notification access, once.
+              // An event with a time also asks for notification access,
+              // once; without one there is nothing to remind of.
               String? zone;
-              if (widget.onRequestReminder == null ||
-                  await widget.onRequestReminder!()) {
+              if (event.time != null &&
+                  (widget.onRequestReminder == null ||
+                      await widget.onRequestReminder!())) {
                 zone = (await FlutterTimezone.getLocalTimezone()).identifier;
               }
-              await c.addEvent(text, day: event.day, time: event.time, zone: zone);
+              await c.addEvent(
+                text,
+                day: event.day,
+                time: event.time,
+                zone: zone,
+              );
             },
           ),
         ],
@@ -1303,9 +1338,8 @@ class _DetailSlot extends StatelessWidget {
 class _Group {
   final String id, title;
   final String? sub;
-  final int? count;
   final bool red;
-  const _Group(this.id, this.title, {this.sub, this.count, this.red = false});
+  const _Group(this.id, this.title, {this.sub, this.red = false});
 }
 
 class _GroupLabel extends StatelessWidget {
@@ -1314,11 +1348,8 @@ class _GroupLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = DayColors.of(context);
-    final base = Theme.of(context).textTheme.bodyMedium!.copyWith(
-      fontSize: 15,
-      height: 20 / 15,
-      color: c.muted,
-    );
+    final base = Theme.of(context).textTheme.bodyMedium!
+        .copyWith(fontSize: 15, height: 20 / 15, color: c.muted);
     final head = group.red ? c.overdue : c.muted;
     return Text.rich(
       TextSpan(
@@ -1327,15 +1358,8 @@ class _GroupLabel extends StatelessWidget {
             text: group.title,
             style: base.copyWith(fontWeight: FontWeight.w500, color: head),
           ),
-          // Figma: the heading, the count and the date are one row with an
-          // 8px gap, all Medium 15.
-          if (group.count != null) ...[
-            const WidgetSpan(child: SizedBox(width: 8)),
-            TextSpan(
-              text: '${group.count}',
-              style: base.copyWith(fontWeight: FontWeight.w500, color: head),
-            ),
-          ],
+          // Figma: the heading and the date are one row with an 8px gap,
+          // both Medium 15.
           if (group.sub != null) ...[
             const WidgetSpan(child: SizedBox(width: 8)),
             TextSpan(
@@ -1417,4 +1441,39 @@ class _CardDrag extends ReorderableDragStartListener {
   @override
   MultiDragGestureRecognizer createRecognizer() =>
       VerticalMultiDragGestureRecognizer(debugOwner: this);
+}
+
+/// Keeps a dragged card on the visible part of its own section's list.
+class _SectionBounds extends DragBoundaryDelegate<Rect> {
+  final BuildContext list;
+  _SectionBounds(this.list);
+
+  Rect? get _bounds {
+    final sliver = list.findRenderObject();
+    if (sliver is! RenderSliver || !sliver.attached) return null;
+    if ((sliver.geometry?.paintExtent ?? 0) <= 0) return null;
+    return MatrixUtils.transformRect(
+      sliver.getTransformTo(null),
+      sliver.paintBounds,
+    );
+  }
+
+  @override
+  bool isWithinBoundary(Rect dragged) {
+    final b = _bounds;
+    return b == null || (dragged.top >= b.top && dragged.bottom <= b.bottom);
+  }
+
+  @override
+  Rect nearestPositionWithinBoundary(Rect dragged) {
+    final b = _bounds;
+    if (b == null) return dragged;
+    // A section shorter than the card (one row half scrolled away) pins
+    // it to the section's top rather than throwing.
+    final top = math.max(
+      b.top,
+      math.min(dragged.top, b.bottom - dragged.height),
+    );
+    return Rect.fromLTWH(dragged.left, top, dragged.width, dragged.height);
+  }
 }

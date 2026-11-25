@@ -142,6 +142,55 @@ void main() {
     await db.close();
   });
 
+  testWidgets('a dragged card stays inside its own section', (tester) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final db = AppDatabase.memory(workspaceId: 'local');
+    final repo = SqliteTaskRepository(db);
+    for (final (id, title, day) in [
+      ('a', 'Первое', '2026-10-19'),
+      ('b', 'Второе', '2026-10-19'),
+      ('c', 'Старое', '2026-10-17'),
+    ]) {
+      await repo.execute(
+        TaskCommand.createTask(
+          id: id,
+          title: title,
+          listId: inboxId,
+          fields: {'dueDate': day},
+        ),
+      );
+    }
+    final c = TaskController(
+      repo,
+      feedback: const SilentCompletionFeedback(),
+      today: () => LocalDate.parse('2026-10-19'),
+    );
+    await tester.pumpWidget(MaterialApp(home: TaskHome(controller: c)));
+    await tester.pumpAndSettle();
+    double y(String t) => tester.getTopLeft(find.text(t).last).dy;
+    final label = y('Просроченные');
+    final drag = await tester.startGesture(
+      tester.getCenter(find.text('Первое')),
+    );
+    for (var i = 0; i < 20; i++) {
+      await drag.moveBy(const Offset(0, 20));
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    // 400 px down, yet the card is held above «Просроченные».
+    expect(y('Первое') < label, true);
+    await drag.up();
+    await tester.pumpAndSettle();
+    expect(y('Второе') < y('Первое'), true);
+    expect(y('Первое') < y('Просроченные'), true);
+    expect(y('Просроченные') < y('Старое'), true);
+    await tester.pumpWidget(const SizedBox());
+    c.dispose();
+    await db.close();
+  });
+
   testWidgets('right click on a sidebar list offers rename and delete', (
     tester,
   ) async {
@@ -258,9 +307,11 @@ void main() {
     c.navigate(TaskView.all);
     await tester.pumpAndSettle();
     double y(String t) => tester.getTopLeft(find.text(t)).dy;
-    expect(find.textContaining('Просроченные'), findsOneWidget);
+    // The overdue heading has no counter beside it.
+    expect(find.text('Просроченные', findRichText: true), findsOneWidget);
     expect(find.textContaining('Сегодня'), findsWidgets);
-    expect(find.textContaining('Завтра'), findsOneWidget);
+    // The heading and the card's own date both say it.
+    expect(find.textContaining('Завтра'), findsWidgets);
     expect(y('Давнее дело') < y('Дело на сегодня'), true);
     expect(y('Дело на сегодня') < y('Дело на завтра'), true);
     await tester.pumpWidget(const SizedBox());
@@ -298,39 +349,43 @@ void main() {
     await db.close();
   });
 
-  testWidgets('the add field picks an event; it starts dated, time is optional', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(1280, 800);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    final db = AppDatabase.memory(workspaceId: 'local');
-    final repo = SqliteTaskRepository(db);
-    final c = TaskController(
-      repo,
-      feedback: const SilentCompletionFeedback(),
-      today: () => LocalDate.parse('2026-10-19'),
-    );
-    await tester.pumpWidget(MaterialApp(home: TaskHome(controller: c)));
-    await tester.pumpAndSettle();
-    expect(find.text('+ Время'), findsNothing);
-    await tester.tap(find.byKey(const Key('composer-kind')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Событие'));
-    await tester.pumpAndSettle();
-    // The day is there from the start, the time waits for its button.
-    expect(find.text('Сегодня'), findsWidgets);
-    expect(find.text('+ Время'), findsOneWidget);
-    await tester.enterText(find.byKey(const Key('task-title-input')), 'Дождь');
-    await tester.testTextInput.receiveAction(TextInputAction.done);
-    await tester.pumpAndSettle();
-    final added = c.tasks.firstWhere((t) => t.title == 'Дождь');
-    expect(added.isEvent, true);
-    expect(added.dueTime, isNull);
-    expect(added.dueDate.toString(), '2026-10-19');
-    await tester.pumpWidget(const SizedBox());
-    c.dispose();
-    await db.close();
-  });
+  testWidgets(
+    'the add field picks an event; it starts dated, time is optional',
+    (tester) async {
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final db = AppDatabase.memory(workspaceId: 'local');
+      final repo = SqliteTaskRepository(db);
+      final c = TaskController(
+        repo,
+        feedback: const SilentCompletionFeedback(),
+        today: () => LocalDate.parse('2026-10-19'),
+      );
+      await tester.pumpWidget(MaterialApp(home: TaskHome(controller: c)));
+      await tester.pumpAndSettle();
+      expect(find.text('+ Время'), findsNothing);
+      await tester.tap(find.byKey(const Key('composer-kind')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Событие'));
+      await tester.pumpAndSettle();
+      // The day is there from the start, the time waits for its button.
+      expect(find.text('Сегодня'), findsWidgets);
+      expect(find.text('+ Время'), findsOneWidget);
+      await tester.enterText(
+        find.byKey(const Key('task-title-input')),
+        'Дождь',
+      );
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      final added = c.tasks.firstWhere((t) => t.title == 'Дождь');
+      expect(added.isEvent, true);
+      expect(added.dueTime, isNull);
+      expect(added.dueDate.toString(), '2026-10-19');
+      await tester.pumpWidget(const SizedBox());
+      c.dispose();
+      await db.close();
+    },
+  );
 }

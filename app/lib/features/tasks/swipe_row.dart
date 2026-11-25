@@ -127,82 +127,87 @@ class _SwipeRowState extends State<SwipeRow>
       // No clip: the card slides on under the screen's edge instead of
       // being cut off at the list's padding.
       child: AnimatedBuilder(
-          animation: shift,
-          builder: (context, child) {
-            final x = shift.value;
-            return Stack(
-              fit: StackFit.passthrough,
-              children: [
-                if (x > 0)
-                  Positioned.fill(
-                    child: Align(
-                      alignment: Alignment.centerRight,
-                      // The card never covers more of the row than its
-                      // own width, so the actions keep a fixed size.
-                      child: SizedBox(
-                        width: revealed,
-                        height: double.infinity,
+        animation: shift,
+        builder: (context, child) {
+          final x = shift.value;
+          return Stack(
+            fit: StackFit.passthrough,
+            children: [
+              if (x > 0)
+                Positioned.fill(
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    // The card never covers more of the row than its
+                    // own width, so the actions keep a fixed size.
+                    child: SizedBox(
+                      width: revealed,
+                      height: double.infinity,
+                      // A large system font shrinks the actions to fit
+                      // instead of pushing them past the edge.
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
                         child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              _action(
-                                context,
-                                'Изменить',
-                                DayGlyph.note,
-                                widget.onEdit,
-                              ),
-                              _divider(c),
-                              _action(
-                                context,
-                                'Список',
-                                DayGlyph.listStack,
-                                widget.onMove,
-                              ),
-                              _divider(c),
-                              _action(
-                                context,
-                                'Удалить',
-                                DayGlyph.delete,
-                                widget.onDelete,
-                                color: c.overdue,
-                              ),
-                            ],
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _action(
+                              context,
+                              'Изменить',
+                              DayGlyph.note,
+                              widget.onEdit,
+                            ),
+                            _divider(c),
+                            _action(
+                              context,
+                              'Список',
+                              DayGlyph.listStack,
+                              widget.onMove,
+                            ),
+                            _divider(c),
+                            _action(
+                              context,
+                              'Удалить',
+                              DayGlyph.delete,
+                              widget.onDelete,
+                              color: c.overdue,
+                            ),
+                          ],
                         ),
                       ),
                     ),
                   ),
-                Transform.translate(
-                  offset: Offset(-x, 0),
-                  // Flat rows turn into a card once they slide.
-                  child: Stack(
-                    fit: StackFit.passthrough,
-                    children: [
-                      DecoratedBox(
-                        position: DecorationPosition.background,
-                        decoration: x > 0
-                            ? BoxDecoration(
-                                color: c.card,
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(color: c.border),
-                              )
-                            : const BoxDecoration(),
-                        child: child!,
-                      ),
-                      // An open card only closes on a tap.
-                      if (x > 8)
-                        Positioned.fill(
-                          child: GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            onTap: _close,
-                          ),
-                        ),
-                    ],
-                  ),
                 ),
-              ],
-            );
-          },
-          child: widget.child,
+              Transform.translate(
+                offset: Offset(-x, 0),
+                // Flat rows turn into a card once they slide.
+                child: Stack(
+                  fit: StackFit.passthrough,
+                  children: [
+                    DecoratedBox(
+                      position: DecorationPosition.background,
+                      decoration: x > 0
+                          ? BoxDecoration(
+                              color: c.card,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: c.border),
+                            )
+                          : const BoxDecoration(),
+                      child: child!,
+                    ),
+                    // An open card only closes on a tap.
+                    if (x > 8)
+                      Positioned.fill(
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: _close,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          );
+        },
+        child: widget.child,
       ),
     );
   }

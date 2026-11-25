@@ -162,37 +162,42 @@ class _TaskComposerState extends State<TaskComposer> {
     // Figma «Поле добавления»: 48 tall, radius 16, a drop-down, gap 14.
     // A tap anywhere but the field and its send button lets go of focus;
     // touch keeps it by default, so the field stayed lit after adding.
+    final eventRow = event
+        ? Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(
+              children: [
+                _Chip(
+                  label: dayHeading(day, LocalDate.today()).title,
+                  onTap: _pickDay,
+                ),
+                const SizedBox(width: 8),
+                _Chip(
+                  label: time == null ? '+ Время' : timeText,
+                  onTap: _pickTime,
+                  onClear: time == null
+                      ? null
+                      : () => setState(() => time = null),
+                ),
+              ],
+            ),
+          )
+        : const SizedBox(width: double.infinity);
     return TextFieldTapRegion(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          AnimatedSize(
-            duration: duration,
-            curve: MotionTokens.easeOut,
-            alignment: Alignment.bottomLeft,
-            child: event
-                ? Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Row(
-                      children: [
-                        _Chip(
-                          label: dayHeading(day, LocalDate.today()).title,
-                          onTap: _pickDay,
-                        ),
-                        const SizedBox(width: 8),
-                        _Chip(
-                          label: time == null ? '+ Время' : timeText,
-                          onTap: _pickTime,
-                          onClear: time == null
-                              ? null
-                              : () => setState(() => time = null),
-                        ),
-                      ],
-                    ),
-                  )
-                : const SizedBox(width: double.infinity),
-          ),
+          // AnimatedSize with a zero duration re-dirties its own layout,
+          // so reduced motion skips it.
+          duration == Duration.zero
+              ? eventRow
+              : AnimatedSize(
+                  duration: duration,
+                  curve: MotionTokens.easeOut,
+                  alignment: Alignment.bottomLeft,
+                  child: eventRow,
+                ),
           _field(c, ready, duration),
         ],
       ),
@@ -201,34 +206,34 @@ class _TaskComposerState extends State<TaskComposer> {
 
   Widget _field(DayColors c, bool ready, Duration duration) {
     return AnimatedContainer(
-        duration: duration,
-        curve: MotionTokens.easeOut,
-        constraints: const BoxConstraints(minHeight: 48),
-        decoration: BoxDecoration(
-          color: c.input,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: error != null
-                ? c.overdue
-                : focused
-                ? c.icon.withValues(alpha: .6)
-                : c.input,
-          ),
+      duration: duration,
+      curve: MotionTokens.easeOut,
+      constraints: const BoxConstraints(minHeight: 48),
+      decoration: BoxDecoration(
+        color: c.input,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: error != null
+              ? c.overdue
+              : focused
+              ? c.icon.withValues(alpha: .6)
+              : c.input,
         ),
-        child: Row(
-          children: [
-            const SizedBox(width: 16),
-            Builder(
-              builder: (box) => Semantics(
-                button: true,
-                label: event ? 'Событие' : 'Задача',
-                child: GestureDetector(
-                  key: const Key('composer-kind'),
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => _chooseKind(box),
-                  child: SizedBox(
-                    height: 48,
-                    child: Row(
+      ),
+      child: Row(
+        children: [
+          const SizedBox(width: 16),
+          Builder(
+            builder: (box) => Semantics(
+              button: true,
+              label: event ? 'Событие' : 'Задача',
+              child: GestureDetector(
+                key: const Key('composer-kind'),
+                behavior: HitTestBehavior.opaque,
+                onTap: () => _chooseKind(box),
+                child: SizedBox(
+                  height: 48,
+                  child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       SizedBox(
@@ -248,72 +253,68 @@ class _TaskComposerState extends State<TaskComposer> {
                       ),
                     ],
                   ),
-                  ),
                 ),
               ),
             ),
-            Expanded(
-              child: TextField(
-                key: const Key('task-title-input'),
-                controller: text,
-                focusNode: widget.focusNode,
-                onTapOutside: (_) => widget.focusNode.unfocus(),
-                textInputAction: TextInputAction.done,
-                onSubmitted: (_) => save(),
-                maxLength: 500,
-                style: Theme.of(context).textTheme.bodyLarge!
-                    .copyWith(fontSize: 16, height: 22 / 16, letterSpacing: 0),
-                decoration: InputDecoration(
-                  hintText: event ? 'Добавить событие…' : 'Добавить задачу…',
-                  hintStyle: TextStyle(color: c.muted, fontSize: 16),
-                  counterText: '',
-                  errorText: error,
-                  filled: false,
-                  border: InputBorder.none,
-                  enabledBorder: InputBorder.none,
-                  focusedBorder: InputBorder.none,
-                  errorBorder: InputBorder.none,
-                  focusedErrorBorder: InputBorder.none,
-                  contentPadding: const EdgeInsets.fromLTRB(14, 13, 12, 13),
-                ),
+          ),
+          Expanded(
+            child: TextField(
+              key: const Key('task-title-input'),
+              controller: text,
+              focusNode: widget.focusNode,
+              onTapOutside: (_) => widget.focusNode.unfocus(),
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => save(),
+              maxLength: 500,
+              style: Theme.of(context).textTheme.bodyLarge!
+                  .copyWith(fontSize: 16, height: 22 / 16, letterSpacing: 0),
+              decoration: InputDecoration(
+                hintText: event ? 'Добавить событие…' : 'Добавить задачу…',
+                hintStyle: TextStyle(color: c.muted, fontSize: 16),
+                counterText: '',
+                errorText: error,
+                filled: false,
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                errorBorder: InputBorder.none,
+                focusedErrorBorder: InputBorder.none,
+                contentPadding: const EdgeInsets.fromLTRB(14, 13, 12, 13),
               ),
             ),
-            AnimatedScale(
-              scale: ready ? 1 : .6,
+          ),
+          AnimatedScale(
+            scale: ready ? 1 : .6,
+            duration: duration,
+            curve: Curves.easeOutBack,
+            child: AnimatedOpacity(
+              opacity: ready ? 1 : 0,
               duration: duration,
-              curve: Curves.easeOutBack,
-              child: AnimatedOpacity(
-                opacity: ready ? 1 : 0,
-                duration: duration,
-                child: Padding(
-                  padding: const EdgeInsets.only(right: 6),
-                  child: SizedBox(
-                    width: 36,
-                    height: 36,
-                    child: FluidIconButton(
-                      tooltip: 'Добавить',
-                      sound: null,
-                      onPressed: saving || !ready ? null : save,
-                      icon: Container(
-                        width: 30,
-                        height: 30,
-                        decoration: BoxDecoration(
-                          color: c.text,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: DayIcon(
-                          DayGlyph.send,
-                          size: 18,
-                          color: c.screen,
-                        ),
+              child: Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: SizedBox(
+                  width: 36,
+                  height: 36,
+                  child: FluidIconButton(
+                    tooltip: 'Добавить',
+                    sound: null,
+                    onPressed: saving || !ready ? null : save,
+                    icon: Container(
+                      width: 30,
+                      height: 30,
+                      decoration: BoxDecoration(
+                        color: c.text,
+                        borderRadius: BorderRadius.circular(10),
                       ),
+                      child: DayIcon(DayGlyph.send, size: 18, color: c.screen),
                     ),
                   ),
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
+      ),
     );
   }
 }
